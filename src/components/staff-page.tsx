@@ -12,10 +12,12 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { markNotificationRead } from "@/app/crud-actions";
 import { toast } from "sonner";
 import { CameraCalibration } from "@/components/camera-calibration";
+import { PrinterPanel } from "@/components/printer-panel";
+import type { PrinterSettings } from "@/lib/printer-settings";
 
 type StaffPageKey = "overview" | "machine" | "sessions" | "hardware" | "notifications";
 export type StaffData = {
-  kiosks: { id: string; name: string; location: string | null; status: string; cameraSettings: { iso: number; shutterSpeed: string; aperture: string; resolution: string; whiteBalance: string; focusMode: "auto" | "manual" } | null; deviceInfo: { cameraConnected: boolean; printerConnected: boolean } | null; lastPingAt: Date | null }[];
+  kiosks: { id: string; name: string; location: string | null; status: string; cameraSettings: { iso: number; shutterSpeed: string; aperture: string; resolution: string; whiteBalance: string; focusMode: "auto" | "manual" } | null; printerSettings: PrinterSettings | null; deviceInfo: { cameraConnected: boolean; printerConnected: boolean } | null; lastPingAt: Date | null }[];
   sessions: { id: string; kioskId: string; packageName: string | null; photoCount: number; status: string; startedAt: Date }[];
   notifications: { id: string; kioskId: string | null; title: string; message: string; createdAt: Date; isRead: boolean }[];
 };

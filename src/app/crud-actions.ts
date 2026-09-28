@@ -8,6 +8,7 @@ import { kioskPackages, kiosks, notifications, owners, paymentCredentials, profi
 import { db } from "@/db";
 import { audit, failure, getActor, ownerForResource, permits, transact, type ActionResult } from "@/lib/server-actions";
 import { encryptCredential } from "@/lib/payment-crypto";
+import { printerSettingsSchema } from "@/lib/printer-settings";
 
 const uuid = z.string().uuid();
 const nonnegative = z.number().int().nonnegative();
@@ -33,7 +34,7 @@ export async function listKiosks() {
   return { ok: true as const, data: await db.select().from(kiosks).where(a.role === "superadmin" ? undefined : eq(kiosks.ownerId, a.ownerId!)) };
 }
 export async function saveKiosk(id: string | null, input: unknown) {
-  const a = await actor(); const p = z.object({ ownerId: uuid.optional(), name: z.string().trim().min(1).max(150), location: z.string().max(2000).nullable().optional(), sessionLimit: nonnegative.max(1000000), theme: z.record(z.string(), z.unknown()).nullable().optional(), cameraSettings: cameraSettings.nullable().optional(), printerSettings: z.record(z.string(), z.unknown()).nullable().optional() }).strict().safeParse(input);
+  const a = await actor(); const p = z.object({ ownerId: uuid.optional(), name: z.string().trim().min(1).max(150), location: z.string().max(2000).nullable().optional(), sessionLimit: nonnegative.max(1000000), theme: z.record(z.string(), z.unknown()).nullable().optional(), cameraSettings: cameraSettings.nullable().optional(), printerSettings: printerSettingsSchema.nullable().optional() }).strict().safeParse(input);
   if (!a || !permits(a)) return result("unauthorized"); if (!p.success || (id && !uuid.safeParse(id).success)) return result();
   const ownerId = a.role === "superadmin" ? p.data.ownerId : a.ownerId; if (!ownerId || !permits(a, ownerId)) return result("unauthorized");
   const r = await transact(a, id ? "kiosk.updated" : "kiosk.created", ownerId, async (tx) => {
