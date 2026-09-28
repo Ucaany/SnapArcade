@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activityLogs, invitations, invoices, kiosks, notifications, owners, paymentCredentials, profiles, sessions, staffAssignments, subscriptionPlans, subscriptions, transactions, vouchers } from "@/db/schema";
 import { getActor } from "@/lib/server-actions";
@@ -21,7 +21,7 @@ export async function loadDashboardData() {
   const sessionRows = actor.role === "staff"
     ? kioskIds.length ? await db.select().from(sessions).where(inArray(sessions.kioskId, kioskIds)).orderBy(desc(sessions.startedAt)).limit(200) : []
     : await db.select().from(sessions).where(ownerFilter).orderBy(desc(sessions.startedAt)).limit(200);
-  const noticeRows = await db.select().from(notifications).where(eq(notifications.userId, actor.userId)).orderBy(desc(notifications.createdAt)).limit(100);
+  const noticeRows = await db.select().from(notifications).where(and(eq(notifications.userId, actor.userId), or(isNull(notifications.expiresAt), gt(notifications.expiresAt, new Date())))).orderBy(desc(notifications.createdAt)).limit(100);
 
   if (admin) {
     const [ownerRows, planRows, subscriptionRows, invoiceRows, users, logs, invitationRows] = await Promise.all([

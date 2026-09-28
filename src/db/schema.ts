@@ -155,8 +155,8 @@ export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(), userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }), ownerId: uuid("owner_id").references(() => owners.id, { onDelete: "cascade" }), kioskId: uuid("kiosk_id").references(() => kiosks.id, { onDelete: "cascade" }),
   type: notificationTypeEnum("type").notNull().default("general"), title: varchar("title", { length: 200 }).notNull(), message: text("message").notNull(),
   link: varchar("link", { length: 255 }), isRead: boolean("is_read").notNull().default(false), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }),
-}, (t) => ({ userIdx: index("notifications_user_idx").on(t.userId, t.isRead) }));
+  expiresAt: timestamp("expires_at", { withTimezone: true }), eventKey: varchar("event_key", { length: 255 }),
+}, (t) => ({ userIdx: index("notifications_user_idx").on(t.userId, t.isRead), eventKeyUserUnique: uniqueIndex("notifications_event_key_user_unique").on(t.userId, t.eventKey) }));
 
 export const activityLogs = pgTable("activity_logs", {
   id: uuid("id").primaryKey().defaultRandom(), userId: uuid("user_id").references(() => profiles.id, { onDelete: "set null" }), ownerId: uuid("owner_id").references(() => owners.id, { onDelete: "set null" }), kioskId: uuid("kiosk_id").references(() => kiosks.id, { onDelete: "set null" }),
