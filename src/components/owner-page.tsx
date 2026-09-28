@@ -11,11 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { loadDashboardData } from "@/lib/dashboard-data";
-import { generatePairingCode, markNotificationRead, savePaymentCredential, saveVoucher } from "@/app/crud-actions";
+import { generatePairingCode, markNotificationRead, saveVoucher } from "@/app/crud-actions";
 import { CameraCalibration } from "@/components/camera-calibration";
 import { PrinterPanel } from "@/components/printer-panel";
 import { useRouter } from "next/navigation";
 import { SubscriptionPaymentButton } from "@/components/subscription-payment-button";
+import { PaymentCredentials } from "@/components/payment-credentials";
 
 type Page = "overview" | "machines" | "machine-detail" | "sessions" | "transactions" | "vouchers" | "payment" | "customize" | "subscription" | "staff" | "notifications" | "settings";
 type OwnerData = Extract<NonNullable<Awaited<ReturnType<typeof loadDashboardData>>>, { profile: unknown }>;
@@ -29,7 +30,7 @@ const titles: Record<Page, { title: string; description: string }> = {
   sessions: { title: "Riwayat sesi", description: "Cari sesi foto, status pembayaran, dan detail pelanggan." },
   transactions: { title: "Transaksi & laporan", description: "Tinjau transaksi customer dan ekspor laporan." },
   vouchers: { title: "Manajemen voucher", description: "Lihat kode diskon, kuota, dan masa berlaku." },
-  payment: { title: "Payment gateway", description: "Credential merchant." },
+  payment: { title: "Payment gateway", description: "Kelola credential gateway dan uji koneksi provider." },
   customize: { title: "Kustomisasi kiosk", description: "Tampilan kiosk." },
   subscription: { title: "Langganan saya", description: "Paket aktif, kuota, dan riwayat invoice." },
   staff: { title: "Manajemen staff", description: "Daftar staff workspace." },
@@ -129,17 +130,7 @@ function Settings({ data }: { data: OwnerData }) {
 }
 
 function Payment({ data }: { data: OwnerData }) {
-  const router = useRouter();
-  const [pending, setPending] = useState(false);
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setPending(true);
-    const form = event.currentTarget; const values = new FormData(form); const provider = String(values.get("provider")) as "midtrans" | "xendit" | "tripay";
-    const config = Object.fromEntries([...values.entries()].filter(([key]) => key.startsWith("secret_")).map(([key, value]) => [key.slice(7), String(value)]));
-    const result = await savePaymentCredential(null, { provider, label: `${provider} ${values.get("environment")}`, config, isActive: true, isSandbox: values.get("environment") === "sandbox" });
-    setPending(false);
-    if (!result.ok) toast.error("Credential gagal disimpan."); else { toast.success("Credential terenkripsi dan disimpan."); form.reset(); router.refresh(); }
-  };
-  return <div className="space-y-6"><Header page="payment" /><form onSubmit={submit} className="max-w-xl space-y-4 rounded-xl border bg-card p-5"><label className="grid gap-2 text-sm font-medium">Provider<Select name="provider" defaultValue="midtrans"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="midtrans">Midtrans</SelectItem><SelectItem value="xendit">Xendit</SelectItem><SelectItem value="tripay">Tripay</SelectItem></SelectContent></Select></label><label className="grid gap-2 text-sm font-medium">Environment<Select name="environment" defaultValue="sandbox"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="sandbox">Sandbox</SelectItem><SelectItem value="production">Production</SelectItem></SelectContent></Select></label><label className="grid gap-2 text-sm font-medium">API secret<Input name="secret_apiKey" type="password" required autoComplete="new-password" /></label><Button type="submit" disabled={pending}>{pending ? "Menyimpan..." : "Simpan credential terenkripsi"}</Button><div><h2 className="mb-2 font-medium">Credential tersimpan</h2>{data.credentials.map((item) => <p key={item.id} className="text-sm text-muted-foreground">{item.provider} · {item.label} · {item.isSandbox ? "Sandbox" : "Production"}</p>)}{!data.credentials.length && <p className="text-sm text-muted-foreground">Belum ada credential.</p>}</div></form></div>;
+  return <div className="space-y-6"><Header page="payment" /><PaymentCredentials credentials={data.credentials} /></div>;
 }
 
 export function OwnerPage({ page, machineId, data }: { page: Page; machineId?: string; data: OwnerData }) {

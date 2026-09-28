@@ -1,6 +1,6 @@
 {
-  "id": "ac6d3a80-bb0a-4d6f-9f15-0a41cac1155b",
-  "prevId": "1167747b-27b7-40f8-a3b6-a7390d5e1dc5",
+  "id": "a5044114-75ce-4165-ae73-b963c5b5cd56",
+  "prevId": "29850747-3e42-4975-be86-dfa352fc388f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -801,6 +801,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "event_key": {
+          "name": "event_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -821,6 +827,27 @@
             }
           ],
           "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "notifications_event_key_user_unique": {
+          "name": "notifications_event_key_user_unique",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "with": {},
           "method": "btree",
           "concurrently": false
@@ -1412,6 +1439,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "download_count": {
+          "name": "download_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -1598,6 +1632,27 @@
           "with": {},
           "method": "btree",
           "concurrently": false
+        },
+        "staff_assignments_staff_kiosk_unique": {
+          "name": "staff_assignments_staff_kiosk_unique",
+          "columns": [
+            {
+              "expression": "staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kiosk_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
@@ -1628,15 +1683,7 @@
           "onDelete": "cascade"
         }
       },
-      "compositePrimaryKeys": {
-        "staff_assignments_staff_id_kiosk_id_pk": {
-          "name": "staff_assignments_staff_id_kiosk_id_pk",
-          "columns": [
-            "staff_id",
-            "kiosk_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

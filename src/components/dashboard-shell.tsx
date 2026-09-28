@@ -12,6 +12,10 @@ import {
 } from "@/components/ui/sidebar08/sidebar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { NotificationBell } from "@/components/notification-bell";
+import { signOut } from "@/app/auth-actions";
+import type { Actor } from "@/lib/server-actions";
+import type { notifications } from "@/db/schema";
+type Notice = typeof notifications.$inferSelect;
 
 const links = [
   { href: "/dashboard", label: "Ringkasan", icon: LayoutDashboard },
@@ -48,7 +52,7 @@ const staffLinks = [
   { href: "/staff/notifikasi", label: "Notifikasi", icon: Bell },
 ];
 
-export function DashboardShell({ children }: Readonly<{ children: React.ReactNode }>) {
+export function DashboardShell({ children, actor, notices }: Readonly<{ children: React.ReactNode; actor: Actor | null; notices: Notice[] }>) {
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
   const isStaff = pathname.startsWith("/staff");
@@ -79,22 +83,22 @@ export function DashboardShell({ children }: Readonly<{ children: React.ReactNod
       </SidebarContent>
       <SidebarFooter className="border-t p-3">
         <div className="flex min-h-12 items-center gap-3 rounded-md px-2">
-          <Avatar className="size-9"><AvatarFallback>SA</AvatarFallback></Avatar>
-          <div className="min-w-0"><p className="truncate text-sm font-medium">SnapArcade</p><p className="text-xs text-muted-foreground">{isAdmin ? "Superadmin" : isStaff ? "Staff Operasional" : "Workspace Owner"}</p></div>
+          <Avatar className="size-9"><AvatarFallback>{actor?.fullName.slice(0, 2).toUpperCase() ?? "SA"}</AvatarFallback></Avatar>
+          <div className="min-w-0"><p className="truncate text-sm font-medium">{actor?.fullName ?? "SnapArcade"}</p><p className="text-xs text-muted-foreground">{actor?.role ?? (isAdmin ? "superadmin" : isStaff ? "staff" : "owner")}</p></div>
         </div>
       </SidebarFooter>
     </Sidebar>
     <SidebarInset className="min-w-0">
       <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur md:px-6">
-        <div className="flex min-w-0 items-center gap-3"><SidebarTrigger className="size-10" />
-          <Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbLink href={basePath}>{isAdmin ? "Superadmin" : isStaff ? "Staff" : "Dashboard"}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbPage>{page}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
+        <div className="flex min-w-0 items-center gap-3"><SidebarTrigger className="size-10 shrink-0" />
+          <Breadcrumb className="min-w-0"><BreadcrumbList className="min-w-0"><BreadcrumbItem className="min-w-0"><BreadcrumbLink className="truncate" href={basePath}>{isAdmin ? "Superadmin" : isStaff ? "Staff" : "Dashboard"}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate">{page}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <NotificationBell href={isAdmin ? "/admin/notifikasi" : isStaff ? "/staff/notifikasi" : "/dashboard/notifikasi"} />
+          <NotificationBell href={isAdmin ? "/admin/notifikasi" : isStaff ? "/staff/notifikasi" : "/dashboard/notifikasi"} notices={notices} />
           <DropdownMenu>
-            <DropdownMenuTrigger aria-label="Buka menu akun" className="inline-flex size-10 items-center justify-center rounded-full border bg-muted text-sm font-semibold">SA</DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56"><DropdownMenuLabel>{isAdmin ? "Superadmin" : isStaff ? "Staff Operasional" : "Workspace Owner"}</DropdownMenuLabel><DropdownMenuSeparator />
-              <DropdownMenuItem render={<Link href="/masuk" />}><LogOut />Keluar (demo)</DropdownMenuItem>
+            <DropdownMenuTrigger aria-label="Buka menu akun" className="inline-flex size-10 items-center justify-center rounded-full border bg-muted text-sm font-semibold">{actor?.fullName.slice(0, 2).toUpperCase() ?? "SA"}</DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56"><DropdownMenuLabel>{actor?.email ?? (isAdmin ? "Superadmin" : isStaff ? "Staff Operasional" : "Workspace Owner")}</DropdownMenuLabel><DropdownMenuSeparator />
+              <DropdownMenuItem render={<form action={signOut} />}><LogOut />Keluar</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

@@ -9,11 +9,13 @@ import { db } from "@/db";
 import { audit, failure, getActor, ownerForResource, permits, transact, type ActionResult } from "@/lib/server-actions";
 import { encryptCredential } from "@/lib/payment-crypto";
 import { printerSettingsSchema } from "@/lib/printer-settings";
+import { decryptCredential } from "@/lib/payment-crypto";
+import { verifyPaymentCredential as verifyProviderCredential, type PaymentProvider } from "@/lib/payment-verify";
 
 const uuid = z.string().uuid();
 const nonnegative = z.number().int().nonnegative();
 const cameraSettings = z.object({ iso: z.number().int().min(50).max(12800), shutterSpeed: z.string().trim().min(1).max(30), aperture: z.string().trim().min(1).max(20), resolution: z.string().trim().min(1).max(30), whiteBalance: z.string().trim().min(1).max(30), focusMode: z.enum(["auto", "manual"]) }).strict();
-const result = (error: "invalid" | "unauthorized" | "not_found" = "invalid"): ActionResult => ({ ok: false, error });
+const result = <T = { id?: string }>(error: "invalid" | "unauthorized" | "not_found" = "invalid"): ActionResult<T> => ({ ok: false, error });
 const refresh = (admin = false) => revalidatePath(admin ? "/admin" : "/dashboard");
 async function actor(): Promise<Awaited<ReturnType<typeof getActor>>> { return getActor(); }
 
@@ -106,6 +108,38 @@ export async function savePaymentCredential(id: string | null, input: unknown) {
   if (r.ok && !r.data) return result("not_found"); refresh(); return r;
 }
 export async function deletePaymentCredential(id: string) { return deleteTenant(paymentCredentials, id, "payment_credential"); }
+
+const paymentTest = z.object({ provider: z.enum(["midtrans", "xendit", "tripay"]), config: z.record(z.string(), z.string().min(1).max(4000)).refine((v) => Object.keys(v).length > 0), isSandbox: z.boolean() }).strict();
+type PaymentTestResult = { verified: boolean; message: string; latencyMs: number; provider: PaymentProvider; isSandbox: boolean };
+
+export async function testPaymentCredentialInput(input: unknown): Promise<ActionResult<PaymentTestResult>> {
+  const a = await actor(); const p = paymentTest.safeParse(input);
+  if (!a || a.role !== "owner" || !a.ownerId) return result("unauthorized");
+  if (!p.success) return result();
+  const checked = await verifyProviderCredential(p.data.provider, p.data.config, p.data.isSandbox);
+  return { ok: true, data: { ...checked, provider: p.data.provider, isSandbox: p.data.isSandbox } };
+}
+
+export async function verifyPaymentCredential(id: string): Promise<ActionResult<PaymentTestResult>> {
+  const a = await actor();
+  if (!a || a.role !== "owner" || !a.ownerId) return result("unauthorized");
+  if (!uuid.safeParse(id).success) return result();
+  const [row] = await db.select({ id: paymentCredentials.id, ownerId: paymentCredentials.ownerId, provider: paymentCredentials.provider, encryptedConfig: paymentCredentials.encryptedConfig, isSandbox: paymentCredentials.isSandbox }).from(paymentCredentials).where(and(eq(paymentCredentials.id, id), eq(paymentCredentials.ownerId, a.ownerId))).limit(1);
+  if (!row) return result("not_found");
+  let checked: ReturnType<typeof verifyProviderCredential> extends Promise<infer T> ? T : never;
+  try {
+    checked = await verifyProviderCredential(row.provider, decryptCredential(row.encryptedConfig) as Record<string, string>, row.isSandbox);
+  } catch {
+    checked = { verified: false, message: "Credential tidak dapat diproses di server.", latencyMs: 0 };
+  }
+  if (checked.verified) {
+    await transact(a, "payment_credential.verified", a.ownerId, async (tx) => {
+      await tx.update(paymentCredentials).set({ lastVerifiedAt: new Date() }).where(and(eq(paymentCredentials.id, id), eq(paymentCredentials.ownerId, a.ownerId!)));
+      return { id };
+    });
+  }
+  return { ok: true, data: { ...checked, provider: row.provider, isSandbox: row.isSandbox } };
+}
 
 export async function assignStaff(staffId: string, kioskId: string, assign: boolean) {
   const a = await actor(); if (!a || a.role !== "owner" || !a.ownerId) return result("unauthorized"); if (!uuid.safeParse(staffId).success || !uuid.safeParse(kioskId).success || typeof assign !== "boolean") return result();

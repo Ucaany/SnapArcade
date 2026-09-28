@@ -5,16 +5,16 @@ import { activityLogs, owners, profiles } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
 
 export type ActionResult<T = { id?: string }> = { ok: true; data?: T } | { ok: false; error: "invalid" | "unauthorized" | "not_found" | "conflict" | "failed" };
-export type Actor = { userId: string; role: "owner" | "staff" | "superadmin"; ownerId: string | null };
+export type Actor = { userId: string; role: "owner" | "staff" | "superadmin"; ownerId: string | null; fullName: string; email: string };
 
 export async function getActor(): Promise<Actor | null> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const [profile] = await db.select({ role: profiles.role, status: profiles.status, ownerId: owners.id, ownerStatus: owners.status }).from(profiles)
+  const [profile] = await db.select({ role: profiles.role, status: profiles.status, ownerId: owners.id, ownerStatus: owners.status, fullName: profiles.fullName, email: profiles.email }).from(profiles)
     .leftJoin(owners, eq(owners.userId, profiles.id)).where(eq(profiles.id, user.id)).limit(1);
   return profile?.status === "active" && (profile.role !== "owner" || profile.ownerStatus === "active")
-    ? { userId: user.id, role: profile.role, ownerId: profile.ownerId }
+    ? { userId: user.id, role: profile.role, ownerId: profile.ownerId, fullName: profile.fullName, email: profile.email }
     : null;
 }
 

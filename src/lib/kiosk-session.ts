@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { kiosks, sessions, sessionPhotos } from "@/db/schema";
 import { adminClient } from "@/lib/supabase/admin";
 
-export const SESSION_PHOTO_BUCKET = process.env.SESSION_PHOTO_BUCKET ?? "session-photos";
+export const SESSION_PHOTO_BUCKET = process.env.SUPABASE_STORAGE_BUCKET_SESSIONS ?? "session-photos";
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const QR_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const MAX_DOWNLOADS = 20;

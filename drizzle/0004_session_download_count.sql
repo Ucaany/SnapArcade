@@ -1,1 +1,0 @@
-ALTER TABLE "sessions" ADD COLUMN "download_count" integer DEFAULT 0 NOT NULL;

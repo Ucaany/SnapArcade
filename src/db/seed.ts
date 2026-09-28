@@ -1,10 +1,13 @@
-import "dotenv/config";
+import { config } from "dotenv";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
   kioskPackages, kiosks, owners, profiles, sessions, subscriptionPlans, subscriptions, vouchers,
 } from "./schema";
+
+config({ path: ".env.local" });
+config();
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || databaseUrl.includes("replace-me") || databaseUrl.includes("your-project")) {
@@ -43,8 +46,9 @@ const voucherData = [
 const customerNames = ["Rian Pratama", "Ayu Lestari", "Fajar & Nadia Wedding", "Dimas Saputra", "Sari Maharani"];
 const frameNames = ["Pastel Party", "Retro 90s", "Wedding Elegance", "Urban Neon", "Classic Black"];
 
-try {
-  await db.transaction(async (tx) => {
+async function main() {
+  try {
+    await db.transaction(async (tx) => {
     const authRows = await sql<{ id: string; email: string }[]>`
       select id, email from auth.users
       where email in ${sql(ownerData.map((owner) => owner.email))}
@@ -134,3 +138,7 @@ try {
 } finally {
   await sql.end();
 }
+
+}
+
+void main();

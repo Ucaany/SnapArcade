@@ -40,7 +40,7 @@ export async function inviteOwner(formData: FormData) {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 7 * 86400000);
   await db.insert(invitations).values({ email: parsed.data.email.toLowerCase(), fullName: parsed.data.fullName, businessName: parsed.data.businessName, token, invitedBy: user.id, expiresAt });
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const site = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const { error } = await adminClient.auth.admin.inviteUserByEmail(parsed.data.email, { redirectTo: `${site}/auth/callback?token=${token}` });
   if (error) {
     await db.delete(invitations).where(eq(invitations.token, token));

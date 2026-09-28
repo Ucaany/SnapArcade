@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 function key() {
   const encoded = process.env.ENCRYPTION_KEY ?? "";
   const decoded = Buffer.from(encoded, "base64");
-  if (decoded.length !== 32 || decoded.toString("base64").replace(/=+$/, "") !== encoded.replace(/=+$/, "")) throw new Error("ENCRYPTION_KEY must be a base64-encoded 32-byte key");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || decoded.length !== 32 || decoded.toString("base64").replace(/=+$/, "") !== encoded.replace(/=+$/, "")) throw new Error("ENCRYPTION_KEY must be a base64-encoded 32-byte key");
   return decoded;
 }
 

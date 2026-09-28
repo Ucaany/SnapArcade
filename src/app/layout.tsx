@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
+import { Inter, Archivo_Black, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter-loaded" });
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk-loaded" });
+const archivoBlack = Archivo_Black({ subsets: ["latin"], weight: "400", variable: "--font-archivo-black-loaded" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://snaparcade.id"),
@@ -11,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="id">
+    <html lang="id" className={`${inter.variable} ${spaceGrotesk.variable} ${archivoBlack.variable}`}>
       <body>{children}</body>
     </html>
   );

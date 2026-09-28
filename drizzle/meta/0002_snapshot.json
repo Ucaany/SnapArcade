@@ -1,6 +1,6 @@
 {
-  "id": "3c2d3cb9-7850-456b-9f69-349549f717b9",
-  "prevId": "41d47763-ef9b-4c3a-85bf-61645cccbe2f",
+  "id": "29850747-3e42-4975-be86-dfa352fc388f",
+  "prevId": "fe23e0f0-b685-435e-aa5d-0c876a1cc379",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -144,25 +144,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.users": {
-      "name": "users",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.invitations": {
       "name": "invitations",
       "schema": "",
@@ -272,21 +253,7 @@
           "concurrently": false
         }
       },
-      "foreignKeys": {
-        "invitations_invited_by_profiles_id_fk": {
-          "name": "invitations_invited_by_profiles_id_fk",
-          "tableFrom": "invitations",
-          "columnsFrom": [
-            "invited_by"
-          ],
-          "tableTo": "profiles",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "invitations_token_unique": {
@@ -834,6 +801,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "event_key": {
+          "name": "event_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -854,6 +827,27 @@
             }
           ],
           "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "notifications_event_key_user_unique": {
+          "name": "notifications_event_key_user_unique",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "with": {},
           "method": "btree",
           "concurrently": false
@@ -1236,34 +1230,7 @@
           "concurrently": false
         }
       },
-      "foreignKeys": {
-        "profiles_id_users_id_fk": {
-          "name": "profiles_id_users_id_fk",
-          "tableFrom": "profiles",
-          "columnsFrom": [
-            "id"
-          ],
-          "tableTo": "users",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
-        },
-        "profiles_owner_id_owners_id_fk": {
-          "name": "profiles_owner_id_owners_id_fk",
-          "tableFrom": "profiles",
-          "columnsFrom": [
-            "owner_id"
-          ],
-          "tableTo": "owners",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "profiles_email_unique": {
@@ -1472,6 +1439,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "download_count": {
+          "name": "download_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -1658,6 +1632,27 @@
           "with": {},
           "method": "btree",
           "concurrently": false
+        },
+        "staff_assignments_staff_kiosk_unique": {
+          "name": "staff_assignments_staff_kiosk_unique",
+          "columns": [
+            {
+              "expression": "staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kiosk_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
@@ -1688,15 +1683,7 @@
           "onDelete": "cascade"
         }
       },
-      "compositePrimaryKeys": {
-        "staff_assignments_staff_id_kiosk_id_pk": {
-          "name": "staff_assignments_staff_id_kiosk_id_pk",
-          "columns": [
-            "staff_id",
-            "kiosk_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

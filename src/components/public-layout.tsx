@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const links = [["Fitur", "/fitur"], ["Harga", "/harga"], ["Tentang", "/tentang"], ["Kontak", "/kontak"], ["FAQ", "/faq"]];
 
@@ -14,7 +15,7 @@ export function PublicHeader() {
       <button aria-expanded={open} aria-controls="public-navigation" aria-label={open ? "Tutup navigasi" : "Buka navigasi"} className="inline-flex size-11 items-center justify-center rounded-lg border-[3px] border-black bg-white md:hidden" onClick={() => setOpen(!open)}>{open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</button>
       <div id="public-navigation" className={`${open ? "flex" : "hidden"} w-full flex-col gap-2 pb-2 text-sm font-bold md:flex md:w-auto md:flex-row md:items-center md:gap-5 md:pb-0`}>
         {links.map(([label, href]) => <Link className="inline-flex min-h-11 items-center underline-offset-4 hover:underline" href={href} key={href} onClick={() => setOpen(false)}>{label}</Link>)}
-        <Link className="nb-button min-h-11" href="/masuk" onClick={() => setOpen(false)}>Login</Link>
+         <Button nativeButton={false} render={<Link href="/masuk" onClick={() => setOpen(false)} />} variant="public">Masuk ke akun</Button>
       </div>
     </nav>
   </header>;

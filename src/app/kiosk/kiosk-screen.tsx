@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useCameraUSB } from "@/lib/camera-usb";
+import { usePrinterUSB } from "@/lib/printer-usb";
+import { defaultPrinterSettings } from "@/lib/printer-settings";
 
 const steps = ["/kiosk", "/kiosk/pair", "/kiosk/idle", "/kiosk/pilih-paket", "/kiosk/pembayaran", "/kiosk/voucher", "/kiosk/sesi", "/kiosk/editor", "/kiosk/preview-cetak", "/kiosk/mencetak", "/kiosk/hasil"];
 const defaultPackages = [{ id: "", name: "Paket belum dimuat", detail: "Pairing kiosk diperlukan", price: 0, photoCount: 4 }];
@@ -33,6 +36,19 @@ export default function KioskScreen() {
   const [packages, setPackages] = useState(defaultPackages);
   const [qrUrl, setQrUrl] = useState("");
   const [apiBusy, setApiBusy] = useState(false);
+  const [photos, setPhotos] = useState<Record<number, Blob>>({});
+  const [finalStrip, setFinalStrip] = useState<Blob | null>(null);
+  const [finalStripUrl, setFinalStripUrl] = useState<string | null>(null);
+  const camera = useCameraUSB();
+  const printer = usePrinterUSB();
+  const stripCanvas = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!finalStrip) { setFinalStripUrl(null); return; }
+    const url = URL.createObjectURL(finalStrip);
+    setFinalStripUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [finalStrip]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("snaparcade-kiosk-v2");
@@ -49,11 +65,29 @@ export default function KioskScreen() {
   const api = async (url: string, init: RequestInit = {}) => fetch(url, { ...init, headers: { ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(kioskToken ? { "X-Kiosk-Token": kioskToken } : {}), ...init.headers } });
   useEffect(() => { if (!kioskToken) return; void api("/api/kiosk/packages").then(async (response) => { if (response.ok) { const data = await response.json(); setPackages(data.packages.map((item: { id: string; name: string; description: string | null; photoCount: number; priceIdr: number }) => ({ id: item.id, name: item.name, detail: item.description ?? `${item.photoCount} foto`, photoCount: item.photoCount, price: item.priceIdr }))); } }); }, [kioskToken]);
   useEffect(() => {
-    if (path !== "/kiosk/mencetak") return;
+    if (path !== "/kiosk/mencetak" || !finalStrip) return;
+    let cancelled = false;
     setProgress(0);
-    const timer = window.setInterval(() => setProgress((value) => value >= 100 ? 100 : value + 10), 350);
-    return () => window.clearInterval(timer);
-  }, [path]);
+    void (async () => {
+      const started = performance.now();
+      const connected = printer.supported && await printer.connect();
+      if (connected) {
+        let result: "success" | "failed" | "cancelled" = "success";
+        for (let copy = 0; copy < copies; copy += 1) {
+          const printed = await printer.print(finalStrip, defaultPrinterSettings);
+          result = printed.result; if (printed.result !== "success") break;
+          if (!cancelled) setProgress(Math.round(((copy + 1) / copies) * 100));
+        }
+        await api("/api/kiosk/printer/report", { method: "POST", body: JSON.stringify({ result, jobType: "print", elapsedMs: Math.round(performance.now() - started), progress: printer.progress, device: { product: printer.deviceLabel } }) }).catch(() => undefined);
+        if (!cancelled && result !== "success") setNotice(printer.error || "Cetak USB gagal.");
+      } else {
+        const timer = window.setInterval(() => setProgress((value) => value >= 100 ? 100 : value + 10), 350);
+        window.setTimeout(() => window.clearInterval(timer), 3800);
+        setNotice("Printer WebUSB tidak tersedia. Ini simulasi lokal, tidak ada perintah USB.");
+      }
+    })();
+    return () => { cancelled = true; printer.cancel(); };
+  }, [path, finalStrip, copies, printer.supported, printer.connect, printer.print, printer.cancel, printer.error, printer.progress, printer.deviceLabel]);
   useEffect(() => {
     if (path !== "/kiosk/pembayaran" || paymentLeft <= 0 || paymentState === "Pembayaran berhasil (simulasi)") return;
     const timer = window.setInterval(() => setPaymentLeft((left) => Math.max(0, left - 1)), 1000);
@@ -82,6 +116,34 @@ export default function KioskScreen() {
   const go = (to: string) => router.push(to);
   const button = (label: string, to: string, secondary = false) => <Link className="nb-button" style={secondary ? { background: "var(--nb-cyan)" } : undefined} href={to}>{label}</Link>;
   const packageInfo = packages[selected] ?? packages[0];
+  const uploadBlob = async (blob: Blob, index: number) => { if (!sessionId) return false; const body = new FormData(); body.set("file", blob, "photo.jpg"); body.set("order_index", String(index)); const response = await api("/api/kiosk/session/" + sessionId + "/photos", { method: "POST", body }); return response.ok; };
+  const capturePhoto = async () => { const blob = await camera.capture(); if (!blob) return; setPhotos((value) => ({ ...value, [shot - 1]: blob })); await uploadBlob(blob, shot - 1); setNotice("Foto " + shot + " tersimpan dari " + (camera.transport === "webcam" ? "webcam" : "kamera USB") + "."); };
+  const composeStrip = async () => {
+    const canvas = document.createElement("canvas"); canvas.width = 900; canvas.height = 1200;
+    const context = canvas.getContext("2d"); if (!context || !sessionId) return false;
+    const palette = ["#111827", "#ec4899", "#22d3ee", "#ffffff", "#a3e635"];
+    context.fillStyle = palette[frame]; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
+    const images = await Promise.all(Array.from({ length: packageInfo.photoCount }, async (_, index) => {
+      const blob = photos[index]; if (!blob) return null;
+      const image = new Image(); image.src = URL.createObjectURL(blob); await image.decode(); URL.revokeObjectURL(image.src); return image;
+    }));
+    images.forEach((image, index) => {
+      if (!image) return;
+      const box = { x: 60, y: 35 + index * 270, width: 780, height: 230 };
+      const scale = Math.max(box.width / image.naturalWidth, box.height / image.naturalHeight);
+      const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+      context.drawImage(image, box.x + (box.width - width) / 2, box.y + (box.height - height) / 2, width, height);
+    });
+    context.filter = "none";
+    context.fillStyle = frame === 3 ? "#111827" : "#ffffff"; context.font = "bold 30px sans-serif";
+    context.fillText(`SNAPARCADE · ${frames[frame]}`, 60, 1165);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!blob) return false; setFinalStrip(blob);
+    const body = new FormData(); body.set("file", blob, "strip.jpg"); body.set("order_index", "999"); body.set("is_final_strip", "true"); body.set("frame_id", frames[frame]); body.set("filter_applied", JSON.stringify({ brightness, contrast, saturation }));
+    const response = await api("/api/kiosk/session/" + sessionId + "/photos", { method: "POST", body });
+    setNotice(response.ok ? "Strip final tersimpan." : "Strip gagal disimpan."); return response.ok;
+  };
   const createSession = async (paymentState: "paid" | "voucher") => { if (!packageInfo.id || apiBusy) return false; setApiBusy(true); try { let voucherId: string | undefined; if (paymentState === "voucher") { const voucherResponse = await api("/api/kiosk/voucher/validate", { method: "POST", body: JSON.stringify({ code: voucher.trim() }) }); if (!voucherResponse.ok) return false; const voucherResult = await voucherResponse.json(); if (!voucherResult.valid) return false; voucherId = voucherResult.voucher_id; } const response = await api("/api/kiosk/session/create", { method: "POST", body: JSON.stringify({ package_id: packageInfo.id, amount_paid: paymentState === "voucher" ? 0 : packageInfo.price, payment_state: paymentState, voucher_id: voucherId }) }); if (!response.ok) { setNotice("Sesi gagal dibuat. Periksa koneksi kiosk."); return false; } const data = await response.json(); setSessionId(data.session_id); return true; } finally { setApiBusy(false); } };
   let title = "SnapArcade";
   let content: React.ReactNode;
@@ -114,19 +176,19 @@ export default function KioskScreen() {
       break;
     case "/kiosk/sesi":
       title = "Saatnya berpose!";
-      content = <div className="kiosk-landscape"><div className="kiosk-photo kiosk-capture" style={{ transform: `scale(${zoom})` }}>{shot} / {packageInfo.photoCount}</div><div><p>Foto {shot} dari {packageInfo.photoCount}. {retakes[shot] ?? 0}/2 pengambilan ulang.</p><label htmlFor="photo-file">Pilih hasil capture</label><input id="photo-file" type="file" accept="image/jpeg,image/png" className="nb-input" onChange={async (event) => { const file = event.target.files?.[0]; if (!file || !sessionId) return; const body = new FormData(); body.set("file", file); body.set("order_index", String(shot - 1)); const response = await api(`/api/kiosk/session/${sessionId}/photos`, { method: "POST", body }); setNotice(response.ok ? `Foto ${shot} tersimpan.` : "Upload foto gagal, coba lagi."); }} /><div className="kiosk-actions"><button className="nb-button" onClick={() => setShot((value) => value >= packageInfo.photoCount ? 1 : value + 1)}>Foto berikutnya</button><button disabled={(retakes[shot] ?? 0) >= 2} className="nb-button" style={{ background: "var(--nb-cyan)" }} onClick={() => { setRetakes((value) => ({ ...value, [shot]: (value[shot] ?? 0) + 1 })); setNotice(`Foto ${shot} diulang.`); }}>Ulangi foto</button><button className="nb-button" style={{ background: "var(--nb-pink)" }} onClick={() => setZoom((value) => value === 1 ? 1.25 : 1)}>Zoom {zoom > 1 ? "100%" : "125%"}</button></div><p aria-live="polite">{notice}</p><div className="kiosk-actions">{button("Lanjut ke editor", "/kiosk/editor")}</div></div></div>;
+       content = <div className="kiosk-landscape"><div className="kiosk-photo kiosk-capture" style={{ transform: `scale(${zoom})` }}>{camera.previewUrl ? <img src={camera.previewUrl} alt={`Pratinjau foto ${shot}`} /> : <video ref={camera.videoRef} autoPlay muted playsInline aria-label="Pratinjau kamera" />}</div><div><p>Foto {shot} dari {packageInfo.photoCount}. {retakes[shot] ?? 0}/2 pengambilan ulang.</p><button className="nb-button" onClick={() => void (camera.transport ? capturePhoto() : camera.useWebcam())}>{camera.transport ? "Ambil foto" : "Mulai kamera"}</button>{camera.transport === "webcam" && <button className="nb-button" style={{ background: "var(--nb-cyan)" }} onClick={() => void capturePhoto()}>Simpan frame</button>}<label htmlFor="photo-file">Pilih file manual</label><input id="photo-file" type="file" accept="image/jpeg,image/png" className="nb-input" onChange={async (event) => { const file = event.target.files?.[0]; if (!file || !sessionId) return; setPhotos((value) => ({ ...value, [shot - 1]: file })); const body = new FormData(); body.set("file", file); body.set("order_index", String(shot - 1)); const response = await api(`/api/kiosk/session/${sessionId}/photos`, { method: "POST", body }); setNotice(response.ok ? `Foto ${shot} tersimpan.` : "Upload foto gagal, coba lagi."); }} /><div className="kiosk-actions"><button className="nb-button" onClick={() => setShot((value) => value >= packageInfo.photoCount ? 1 : value + 1)}>Foto berikutnya</button><button disabled={(retakes[shot] ?? 0) >= 2} className="nb-button" style={{ background: "var(--nb-cyan)" }} onClick={() => { setRetakes((value) => ({ ...value, [shot]: (value[shot] ?? 0) + 1 })); setNotice(`Foto ${shot} diulang.`); }}>Ulangi foto</button><button className="nb-button" style={{ background: "var(--nb-pink)" }} onClick={() => setZoom((value) => value === 1 ? 1.25 : 1)}>Zoom {zoom > 1 ? "100%" : "125%"}</button></div><p aria-live="polite">{camera.error || notice}</p><div className="kiosk-actions">{button("Lanjut ke editor", "/kiosk/editor")}</div></div></div>;
       break;
     case "/kiosk/editor":
       title = "Atur hasil fotomu";
-      content = <><div className="kiosk-landscape"><div className={`kiosk-strip kiosk-frame-${frame}`} style={{ filter: `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)` }}>{[0, 1, 2, 3].map((i) => <span key={i}>FOTO {i + 1}</span>)}<b>{frames[frame]}</b></div><div><label htmlFor="brightness">Kecerahan {brightness}%</label><input id="brightness" type="range" min="50" max="150" value={brightness} onChange={(e) => setBrightness(Number(e.target.value))}/><label htmlFor="contrast">Kontras {contrast}%</label><input id="contrast" type="range" min="50" max="150" value={contrast} onChange={(e) => setContrast(Number(e.target.value))}/><label htmlFor="saturation">Saturasi {saturation}%</label><input id="saturation" type="range" min="0" max="180" value={saturation} onChange={(e) => setSaturation(Number(e.target.value))}/><p>Pilih frame</p><div className="kiosk-frame-picker">{frames.map((name, index) => <button key={name} className="nb-button" aria-pressed={frame === index} style={{ background: ["var(--nb-primary)", "var(--nb-pink)", "var(--nb-cyan)", "white", "var(--nb-lime)"][index] }} onClick={() => setFrame(index)}>{name}</button>)}</div><p className="kiosk-note">Filter diterapkan sebagai pratinjau CSS; foto kamera belum tersedia.</p></div></div><div className="kiosk-actions">{button("Lihat preview cetak", "/kiosk/preview-cetak")}</div></>;
+       content = <><div className="kiosk-landscape"><div className={`kiosk-strip kiosk-frame-${frame}`} style={{ filter: `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`, backgroundImage: finalStripUrl ? `url(${finalStripUrl})` : undefined }}>{!finalStrip && [0, 1, 2, 3].map((i) => <span key={i}>FOTO {i + 1}</span>)}{!finalStrip && <b>{frames[frame]}</b>}</div><div><label htmlFor="brightness">Kecerahan {brightness}%</label><input id="brightness" type="range" min="50" max="150" value={brightness} onChange={(e) => setBrightness(Number(e.target.value))}/><label htmlFor="contrast">Kontras {contrast}%</label><input id="contrast" type="range" min="50" max="150" value={contrast} onChange={(e) => setContrast(Number(e.target.value))}/><label htmlFor="saturation">Saturasi {saturation}%</label><input id="saturation" type="range" min="0" max="180" value={saturation} onChange={(e) => setSaturation(Number(e.target.value))}/><p>Pilih frame</p><div className="kiosk-frame-picker">{frames.map((name, index) => <button key={name} className="nb-button" aria-pressed={frame === index} style={{ background: ["var(--nb-primary)", "var(--nb-pink)", "var(--nb-cyan)", "white", "var(--nb-lime)"][index] }} onClick={() => setFrame(index)}>{name}</button>)}</div><p className="kiosk-note">Filter dan frame diterapkan ke strip canvas saat disimpan.</p></div></div><div className="kiosk-actions"><button className="nb-button" onClick={() => void composeStrip()}>Simpan strip</button>{button("Lihat preview cetak", "/kiosk/preview-cetak")}</div></>;
       break;
     case "/kiosk/preview-cetak":
       title = "Preview cetak";
-      content = <><div className="kiosk-landscape"><div className="kiosk-strip"><span>SNAP</span><span>ARCADE</span><span>{filter}</span><span>FOTO</span></div><div><p>{packageInfo.detail}</p><label htmlFor="copies">Jumlah cetak</label><select id="copies" className="nb-input" value={copies} onChange={(event) => setCopies(Number(event.target.value))}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n} copy</option>)}</select><p className="kiosk-note">Pratinjau layout demo. Printer belum terhubung.</p></div></div><div className="kiosk-actions">{button("Konfirmasi cetak", "/kiosk/mencetak")}{button("Edit lagi", "/kiosk/editor", true)}</div></>;
+       content = <><div className="kiosk-landscape"><div className="kiosk-strip" style={finalStripUrl ? { backgroundImage: `url(${finalStripUrl})` } : undefined}>{!finalStrip && <><span>SNAP</span><span>ARCADE</span><span>{filter}</span><span>FOTO</span></>}</div><div><p>{packageInfo.detail}</p><label htmlFor="copies">Jumlah cetak</label><select id="copies" className="nb-input" value={copies} onChange={(event) => setCopies(Number(event.target.value))}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n} copy</option>)}</select><p className="kiosk-note">Strip akhir siap dikirim ke printer WebUSB, atau simulasi lokal jika printer tidak tersedia.</p></div></div><div className="kiosk-actions">{button("Konfirmasi cetak", "/kiosk/mencetak")}{button("Edit lagi", "/kiosk/editor", true)}</div></>;
       break;
     case "/kiosk/mencetak":
-      title = progress >= 100 ? "Cetak simulasi selesai" : "Menyiapkan cetakan";
-      content = <><p aria-live="polite">{progress >= 100 ? "Tidak ada printer terhubung, ini hanya simulasi." : "Simulasi proses cetak, tidak ada perintah ke printer."}</p><div className="kiosk-progress" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Progres simulasi cetak"><span style={{ width: `${progress}%` }}/></div><p>{progress}%</p><div className="kiosk-actions"><button className="nb-button" onClick={() => { setProgress(0); window.setTimeout(() => setProgress(100), 400); }}>Ulangi simulasi</button>{button("Lanjut", "/kiosk/hasil", true)}</div></>;
+      title = progress >= 100 ? "Cetak selesai" : "Menyiapkan cetakan";
+      content = <><p aria-live="polite">{progress >= 100 ? "Printer tidak terhubung. Simulasi lokal, tidak ada perintah USB." : "Memproses cetakan lokal. Hubungkan printer WebUSB untuk cetak nyata."}</p><div className="kiosk-progress" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Progres simulasi cetak"><span style={{ width: `${progress}%` }}/></div><p>{progress}%</p><div className="kiosk-actions"><button className="nb-button" onClick={() => { setProgress(0); window.setTimeout(() => setProgress(100), 400); }}>Ulangi simulasi</button>{button("Lanjut", "/kiosk/hasil", true)}</div></>;
       break;
     case "/kiosk/hasil":
       title = "Hasil fotomu siap!";
