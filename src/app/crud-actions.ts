@@ -11,6 +11,7 @@ import { encryptCredential } from "@/lib/payment-crypto";
 
 const uuid = z.string().uuid();
 const nonnegative = z.number().int().nonnegative();
+const cameraSettings = z.object({ iso: z.number().int().min(50).max(12800), shutterSpeed: z.string().trim().min(1).max(30), aperture: z.string().trim().min(1).max(20), resolution: z.string().trim().min(1).max(30), whiteBalance: z.string().trim().min(1).max(30), focusMode: z.enum(["auto", "manual"]) }).strict();
 const result = (error: "invalid" | "unauthorized" | "not_found" = "invalid"): ActionResult => ({ ok: false, error });
 const refresh = (admin = false) => revalidatePath(admin ? "/admin" : "/dashboard");
 async function actor(): Promise<Awaited<ReturnType<typeof getActor>>> { return getActor(); }
@@ -32,7 +33,7 @@ export async function listKiosks() {
   return { ok: true as const, data: await db.select().from(kiosks).where(a.role === "superadmin" ? undefined : eq(kiosks.ownerId, a.ownerId!)) };
 }
 export async function saveKiosk(id: string | null, input: unknown) {
-  const a = await actor(); const p = z.object({ ownerId: uuid.optional(), name: z.string().trim().min(1).max(150), location: z.string().max(2000).nullable().optional(), sessionLimit: nonnegative.max(1000000), theme: z.record(z.string(), z.unknown()).nullable().optional(), cameraSettings: z.record(z.string(), z.unknown()).nullable().optional(), printerSettings: z.record(z.string(), z.unknown()).nullable().optional() }).strict().safeParse(input);
+  const a = await actor(); const p = z.object({ ownerId: uuid.optional(), name: z.string().trim().min(1).max(150), location: z.string().max(2000).nullable().optional(), sessionLimit: nonnegative.max(1000000), theme: z.record(z.string(), z.unknown()).nullable().optional(), cameraSettings: cameraSettings.nullable().optional(), printerSettings: z.record(z.string(), z.unknown()).nullable().optional() }).strict().safeParse(input);
   if (!a || !permits(a)) return result("unauthorized"); if (!p.success || (id && !uuid.safeParse(id).success)) return result();
   const ownerId = a.role === "superadmin" ? p.data.ownerId : a.ownerId; if (!ownerId || !permits(a, ownerId)) return result("unauthorized");
   const r = await transact(a, id ? "kiosk.updated" : "kiosk.created", ownerId, async (tx) => {

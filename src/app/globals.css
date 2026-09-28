@@ -12,6 +12,10 @@
   --color-lime: var(--nb-lime);
   --color-ink: var(--nb-ink);
   --color-background: var(--background);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-inter: Arial, Helvetica, sans-serif;
+  --font-space-grotesk: Arial, Helvetica, sans-serif;
+  --font-archivo-black: Arial, Helvetica, sans-serif;
   --font-heading: var(--font-sans);
   --font-body: var(--font-inter);
   --font-accent: var(--font-archivo-black);
