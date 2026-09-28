@@ -13,7 +13,7 @@ export default function Page() {
       <p className="mb-4 font-bold uppercase tracking-[0.12em]">Akses akun SnapArcade</p>
       <h1 className="font-[family-name:var(--font-space-grotesk)] text-5xl font-extrabold leading-[1.02] sm:text-6xl">Booth kamu, siap dikendalikan.</h1>
       <p className="mt-5 text-lg leading-8">Masuk untuk mengelola operasional photobooth. Akun hanya tersedia melalui undangan Superadmin.</p>
-      <p className="mt-5 border-t-[3px] border-black pt-4 text-sm leading-6">Form ini simulasi. Autentikasi belum terhubung dan data yang dimasukkan tidak dikirim atau disimpan.</p>
+      <p className="mt-5 border-t-[3px] border-black pt-4 text-sm leading-6">Akun hanya tersedia melalui undangan Superadmin.</p>
     </section>
     <AuthForm mode="login" />
   </main>;
