@@ -5,8 +5,36 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1790577691387,
-      "tag": "0000_fantastic_true_believers",
+      "when": 1790606113543,
+      "tag": "0000_tiresome_nightshade",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790606131730,
+      "tag": "0001_auth_users_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790606132514,
+      "tag": "0002_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790606133304,
+      "tag": "0003_realtime_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790613600090,
+      "tag": "0004_awesome_franklin_storm",
       "breakpoints": true
     }
   ]

@@ -1,6 +1,6 @@
 import {
   bigint, boolean, index, integer, jsonb, numeric, pgEnum, pgTable,
-  primaryKey, text, timestamp, uniqueIndex, uuid, varchar,
+  text, timestamp, uniqueIndex, uuid, varchar,
 } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["superadmin", "owner", "staff"]);
@@ -95,7 +95,7 @@ export const kiosks = pgTable("kiosks", {
 export const staffAssignments = pgTable("staff_assignments", {
   id: uuid("id").primaryKey().defaultRandom(), staffId: uuid("staff_id").notNull().references(() => profiles.id, { onDelete: "cascade" }), kioskId: uuid("kiosk_id").notNull().references(() => kiosks.id, { onDelete: "cascade" }),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => ({ staffIdx: index("staff_assignments_staff_idx").on(t.staffId), kioskIdx: index("staff_assignments_kiosk_idx").on(t.kioskId), staffKioskPk: primaryKey({ columns: [t.staffId, t.kioskId] }) }));
+}, (t) => ({ staffIdx: index("staff_assignments_staff_idx").on(t.staffId), kioskIdx: index("staff_assignments_kiosk_idx").on(t.kioskId), staffKioskUnique: uniqueIndex("staff_assignments_staff_kiosk_unique").on(t.staffId, t.kioskId) }));
 
 export const paymentCredentials = pgTable("payment_credentials", {
   id: uuid("id").primaryKey().defaultRandom(), ownerId: uuid("owner_id").notNull().references(() => owners.id, { onDelete: "cascade" }), provider: paymentProviderEnum("provider").notNull(),
@@ -143,7 +143,7 @@ export const transactions = pgTable("transactions", {
   status: transactionStatusEnum("status").notNull().default("pending"), signatureKey: varchar("signature_key", { length: 255 }), webhookPayload: jsonb("webhook_payload"),
   expiresAt: timestamp("expires_at", { withTimezone: true }), settledAt: timestamp("settled_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => ({ ownerIdx: index("transactions_owner_idx").on(t.ownerId), ownerCreatedIdx: index("transactions_owner_created_idx").on(t.ownerId, t.createdAt), sessionIdx: index("transactions_session_idx").on(t.sessionId), kioskIdx: index("transactions_kiosk_idx").on(t.kioskId), statusIdx: index("transactions_status_idx").on(t.status), gatewayIdx: index("transactions_gateway_id_idx").on(t.gatewayTransactionId) }));
+}, (t) => ({ ownerIdx: index("transactions_owner_idx").on(t.ownerId), ownerCreatedIdx: index("transactions_owner_created_idx").on(t.ownerId, t.createdAt), sessionIdx: index("transactions_session_idx").on(t.sessionId), kioskIdx: index("transactions_kiosk_idx").on(t.kioskId), statusIdx: index("transactions_status_idx").on(t.status), gatewayIdx: index("transactions_gateway_id_idx").on(t.gatewayTransactionId), gatewayRefIdx: index("transactions_gateway_reference_idx").on(t.gatewayReference) }));
 
 export const kioskPackages = pgTable("kiosk_packages", {
   id: uuid("id").primaryKey().defaultRandom(), ownerId: uuid("owner_id").notNull().references(() => owners.id, { onDelete: "cascade" }), name: varchar("name", { length: 100 }).notNull(),

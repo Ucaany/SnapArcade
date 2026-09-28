@@ -1,5 +1,4 @@
 import "server-only";
-import { timingSafeEqual } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { paymentCredentials, sessions, transactions } from "@/db/schema";
@@ -47,15 +46,10 @@ export async function xenditRequest<T>(config: XenditConfig, path: string, init?
   return body as T;
 }
 
-export function xenditTokensMatch(expected: string | undefined, actual: string | null): boolean {
-  if (!expected || !actual) return false;
-  const a = Buffer.from(expected, "utf8");
-  const b = Buffer.from(actual, "utf8");
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+export { signaturesMatch as xenditTokensMatch } from "@/lib/signature";
 
 export function xenditStatus(event: XenditInvoice): "pending" | "settlement" | "expired" | "failed" {
-  if (event.status === "PAID") return "settlement";
+  if (["PAID", "SETTLED"].includes(event.status ?? "")) return "settlement";
   if (["EXPIRED", "INACTIVE"].includes(event.status ?? "")) return "expired";
   if (["FAILED"].includes(event.status ?? "")) return "failed";
   return "pending";

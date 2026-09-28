@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { paymentCredentials, sessions, transactions } from "@/db/schema";
@@ -34,11 +34,7 @@ export function midtransSignature(event: Pick<MidtransPayment, "order_id" | "sta
   return createHash("sha512").update(`${event.order_id}${event.status_code}${event.gross_amount}${serverKey}`).digest("hex");
 }
 
-export function signaturesMatch(expected: string, actual: string | undefined) {
-  if (!actual) return false;
-  const a = Buffer.from(expected, "utf8"); const b = Buffer.from(actual, "utf8");
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+export { signaturesMatch } from "@/lib/signature";
 
 export function midtransStatus(event: MidtransPayment): "pending" | "settlement" | "expired" | "failed" {
   if (event.transaction_status === "settlement" && (event.fraud_status === undefined || event.fraud_status === "accept")) return "settlement";

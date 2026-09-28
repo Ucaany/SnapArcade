@@ -1,0 +1,1 @@
+CREATE INDEX "transactions_gateway_reference_idx" ON "transactions" USING btree ("gateway_reference");
