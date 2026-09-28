@@ -119,6 +119,7 @@ export const sessions = pgTable("sessions", {
   photoCount: integer("photo_count").notNull().default(0), status: sessionStatusEnum("status").notNull().default("pending"), voucherId: uuid("voucher_id").references(() => vouchers.id, { onDelete: "set null" }),
   amountPaid: bigint("amount_paid", { mode: "number" }).notNull().default(0), startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }), expiresAt: timestamp("expires_at", { withTimezone: true }),
+  downloadCount: integer("download_count").notNull().default(0),
 }, (t) => ({ ownerIdx: index("sessions_owner_idx").on(t.ownerId), kioskIdx: index("sessions_kiosk_idx").on(t.kioskId), statusIdx: index("sessions_status_idx").on(t.status), startedAtIdx: index("sessions_kiosk_started_idx").on(t.kioskId, t.startedAt) }));
 
 export const sessionPhotos = pgTable("session_photos", {

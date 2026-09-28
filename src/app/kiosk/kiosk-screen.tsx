@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const steps = ["/kiosk", "/kiosk/pair", "/kiosk/idle", "/kiosk/pilih-paket", "/kiosk/pembayaran", "/kiosk/voucher", "/kiosk/sesi", "/kiosk/editor", "/kiosk/preview-cetak", "/kiosk/mencetak", "/kiosk/hasil"];
-const packages = [{ name: "Satu Strip", detail: "4 foto · 1 strip", price: 25000 }, { name: "Dua Strip", detail: "8 foto · 2 strip", price: 40000 }, { name: "Pesta Foto", detail: "8 foto · 3 strip", price: 55000 }];
+const defaultPackages = [{ id: "", name: "Paket belum dimuat", detail: "Pairing kiosk diperlukan", price: 0, photoCount: 4 }];
 const frames = ["Pop Art", "Retro 90s", "Pesta", "Klasik", "Warna-warni"];
 
 export default function KioskScreen() {
@@ -28,19 +28,26 @@ export default function KioskScreen() {
   const [contrast, setContrast] = useState(100);
   const [saturation, setSaturation] = useState(100);
   const [slide, setSlide] = useState(0);
+  const [kioskToken, setKioskToken] = useState("");
+  const [sessionId, setSessionId] = useState("");
+  const [packages, setPackages] = useState(defaultPackages);
+  const [qrUrl, setQrUrl] = useState("");
+  const [apiBusy, setApiBusy] = useState(false);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem("snaparcade-kiosk");
+    const saved = sessionStorage.getItem("snaparcade-kiosk-v2");
     if (saved) {
       try {
         const state = JSON.parse(saved);
-        setSelected(state.selected === 1 ? 1 : 0); setShot(Number.isInteger(state.shot) ? Math.max(1, state.shot) : 1); setFilter(typeof state.filter === "string" ? state.filter : "Warna asli"); setCopies([1, 2, 3].includes(state.copies) ? state.copies : 1);
+        setSelected(Number.isInteger(state.selected) ? state.selected : 0); setShot(Number.isInteger(state.shot) ? Math.max(1, state.shot) : 1); setFilter(typeof state.filter === "string" ? state.filter : "Warna asli"); setCopies([1, 2, 3].includes(state.copies) ? state.copies : 1); setKioskToken(typeof state.kioskToken === "string" ? state.kioskToken : ""); setSessionId(typeof state.sessionId === "string" ? state.sessionId : "");
       } catch {
         sessionStorage.removeItem("snaparcade-kiosk");
       }
     }
   }, []);
-  useEffect(() => { sessionStorage.setItem("snaparcade-kiosk", JSON.stringify({ selected, shot, filter, copies })); }, [selected, shot, filter, copies]);
+  useEffect(() => { sessionStorage.setItem("snaparcade-kiosk-v2", JSON.stringify({ selected, shot, filter, copies, kioskToken, sessionId })); }, [selected, shot, filter, copies, kioskToken, sessionId]);
+  const api = async (url: string, init: RequestInit = {}) => fetch(url, { ...init, headers: { ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(kioskToken ? { "X-Kiosk-Token": kioskToken } : {}), ...init.headers } });
+  useEffect(() => { if (!kioskToken) return; void api("/api/kiosk/packages").then(async (response) => { if (response.ok) { const data = await response.json(); setPackages(data.packages.map((item: { id: string; name: string; description: string | null; photoCount: number; priceIdr: number }) => ({ id: item.id, name: item.name, detail: item.description ?? `${item.photoCount} foto`, photoCount: item.photoCount, price: item.priceIdr }))); } }); }, [kioskToken]);
   useEffect(() => {
     if (path !== "/kiosk/mencetak") return;
     setProgress(0);
@@ -62,11 +69,20 @@ export default function KioskScreen() {
     const timer = window.setInterval(() => setSlide((value) => (value + 1) % frames.length), 2800);
     return () => window.clearInterval(timer);
   }, [path]);
+  useEffect(() => {
+    if (path !== "/kiosk/hasil" || !sessionId || !kioskToken) return;
+    void (async () => {
+      await api(`/api/kiosk/session/${sessionId}/complete`, { method: "POST", body: JSON.stringify({ skip_print: true }) });
+      const response = await api(`/api/kiosk/session/${sessionId}/qr`);
+      if (response.ok) setQrUrl((await response.json()).qr_url);
+    })();
+  }, [path, sessionId, kioskToken]);
 
   const step = Math.max(0, steps.indexOf(path));
   const go = (to: string) => router.push(to);
   const button = (label: string, to: string, secondary = false) => <Link className="nb-button" style={secondary ? { background: "var(--nb-cyan)" } : undefined} href={to}>{label}</Link>;
-  const packageInfo = packages[selected];
+  const packageInfo = packages[selected] ?? packages[0];
+  const createSession = async (paymentState: "paid" | "voucher") => { if (!packageInfo.id || apiBusy) return false; setApiBusy(true); try { let voucherId: string | undefined; if (paymentState === "voucher") { const voucherResponse = await api("/api/kiosk/voucher/validate", { method: "POST", body: JSON.stringify({ code: voucher.trim() }) }); if (!voucherResponse.ok) return false; const voucherResult = await voucherResponse.json(); if (!voucherResult.valid) return false; voucherId = voucherResult.voucher_id; } const response = await api("/api/kiosk/session/create", { method: "POST", body: JSON.stringify({ package_id: packageInfo.id, amount_paid: paymentState === "voucher" ? 0 : packageInfo.price, payment_state: paymentState, voucher_id: voucherId }) }); if (!response.ok) { setNotice("Sesi gagal dibuat. Periksa koneksi kiosk."); return false; } const data = await response.json(); setSessionId(data.session_id); return true; } finally { setApiBusy(false); } };
   let title = "SnapArcade";
   let content: React.ReactNode;
 
@@ -77,7 +93,7 @@ export default function KioskScreen() {
       break;
     case "/kiosk/pair":
       title = "Pairing arcade";
-      content = <><p>Masukkan kode 6 digit dari dashboard. Aktivasi ditampilkan sebagai simulasi lokal.</p><form onSubmit={(event) => { event.preventDefault(); if (!/^\d{6}$/.test(pairCode)) { setNotice("Kode harus terdiri dari 6 angka."); return; } setNotice("Kode demo diterima. Kiosk siap digunakan."); window.setTimeout(() => go("/kiosk/idle"), 700); }}><label htmlFor="pair-code">Kode pairing</label><input id="pair-code" className="nb-input kiosk-input" inputMode="numeric" maxLength={6} value={pairCode} onChange={(event) => setPairCode(event.target.value.replace(/\D/g, ""))} placeholder="000000"/><p aria-live="polite">{notice}</p><div className="kiosk-actions"><button className="nb-button" type="submit">Aktifkan demo</button>{button("Kembali", "/kiosk")}</div></form></>;
+      content = <><p>Masukkan kode 6 digit dari dashboard.</p><form onSubmit={async (event) => { event.preventDefault(); if (!/^\d{6}$/.test(pairCode)) { setNotice("Kode harus terdiri dari 6 angka."); return; } setApiBusy(true); const response = await fetch("/api/kiosk/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pairing_code: pairCode }) }); setApiBusy(false); if (!response.ok) { setNotice("Kode pairing tidak valid atau kedaluwarsa."); return; } const data = await response.json(); setKioskToken(data.pairing_token); setNotice("Kiosk berhasil diaktifkan."); window.setTimeout(() => go("/kiosk/idle"), 500); }}><label htmlFor="pair-code">Kode pairing</label><input id="pair-code" className="nb-input kiosk-input" inputMode="numeric" maxLength={6} value={pairCode} onChange={(event) => setPairCode(event.target.value.replace(/\D/g, ""))} placeholder="000000"/><p aria-live="polite">{notice}</p><div className="kiosk-actions"><button disabled={apiBusy} className="nb-button" type="submit">Aktifkan kiosk</button>{button("Kembali", "/kiosk")}</div></form></>;
       break;
     case "/kiosk/idle":
       title = "Yuk, bikin foto seru!";
@@ -90,15 +106,15 @@ export default function KioskScreen() {
     case "/kiosk/pembayaran":
       title = "Pembayaran demo";
       title = paymentLeft ? "Pindai untuk membayar" : "Waktu pembayaran habis";
-      content = <><p>{packageInfo.name} · Rp{packageInfo.price.toLocaleString("id-ID")}</p><div className="kiosk-payment-layout"><div className="kiosk-qr" aria-label="QR pembayaran dummy, tidak dapat dipindai"><span>QRIS</span><small>SIMULASI</small></div><div><strong className="kiosk-timer" aria-live="polite">{String(Math.floor(paymentLeft / 60)).padStart(2, "0")}:{String(paymentLeft % 60).padStart(2, "0")}</strong><p aria-live="polite">{paymentLeft ? paymentState : "Transaksi demo kedaluwarsa. Tidak ada pembayaran diproses."}</p><small>Pemeriksaan status demo setiap 3 detik. QR ini tidak dapat dipindai.</small></div></div><div className="kiosk-actions"><button disabled={!paymentLeft} className="nb-button" onClick={() => { setPaymentState("Pembayaran berhasil (simulasi)"); go("/kiosk/sesi"); }}>Simulasikan pembayaran berhasil</button>{button("Gunakan voucher", "/kiosk/voucher", true)}{button("Ganti paket", "/kiosk/pilih-paket", true)}</div></>;
+      content = <><p>{packageInfo.name} · Rp{packageInfo.price.toLocaleString("id-ID")}</p><div className="kiosk-payment-layout"><div className="kiosk-qr" aria-label="QR pembayaran menunggu gateway"><span>QRIS</span><small>MENUNGGU</small></div><div><strong className="kiosk-timer" aria-live="polite">{String(Math.floor(paymentLeft / 60)).padStart(2, "0")}:{String(paymentLeft % 60).padStart(2, "0")}</strong><p aria-live="polite">{paymentLeft ? paymentState : "Waktu pembayaran habis."}</p><small>Payment gateway diaktifkan pada tahap berikutnya.</small></div></div><div className="kiosk-actions"><button disabled={!paymentLeft || apiBusy} className="nb-button" onClick={async () => { if (await createSession("paid")) go("/kiosk/sesi"); }}>Lanjut setelah pembayaran</button>{button("Gunakan voucher", "/kiosk/voucher", true)}{button("Ganti paket", "/kiosk/pilih-paket", true)}</div></>;
       break;
     case "/kiosk/voucher":
       title = "Punya kode voucher?";
-      content = <><p>Masukkan kode untuk simulasi. Kode demo apa pun diterima, tanpa validasi server.</p><form onSubmit={(event) => { event.preventDefault(); if (!voucher.trim()) { setNotice("Isi kode voucher terlebih dahulu."); return; } setNotice("Voucher demo diterapkan."); window.setTimeout(() => go("/kiosk/sesi"), 700); }}><label htmlFor="voucher-code">Kode voucher</label><input id="voucher-code" className="nb-input kiosk-input" value={voucher} onChange={(event) => setVoucher(event.target.value)} placeholder="CONTOH"/><p aria-live="polite">{notice}</p><div className="kiosk-actions"><button className="nb-button" type="submit">Terapkan voucher demo</button>{button("Kembali ke paket", "/kiosk/pilih-paket", true)}</div></form></>;
+      content = <><p>Masukkan kode voucher yang diberikan pemilik kiosk.</p><form onSubmit={async (event) => { event.preventDefault(); if (!voucher.trim()) { setNotice("Isi kode voucher terlebih dahulu."); return; } if (await createSession("voucher")) go("/kiosk/sesi"); else setNotice("Voucher atau sesi tidak dapat diproses."); }}><label htmlFor="voucher-code">Kode voucher</label><input id="voucher-code" className="nb-input kiosk-input" value={voucher} onChange={(event) => setVoucher(event.target.value)} placeholder="KODE VOUCHER"/><p aria-live="polite">{notice}</p><div className="kiosk-actions"><button disabled={apiBusy} className="nb-button" type="submit">Terapkan voucher</button>{button("Kembali ke paket", "/kiosk/pilih-paket", true)}</div></form></>;
       break;
     case "/kiosk/sesi":
       title = "Saatnya berpose!";
-      content = <div className="kiosk-landscape"><div className="kiosk-photo kiosk-capture" style={{ transform: `scale(${zoom})` }}>{shot} / {selected === 2 ? 8 : selected === 1 ? 8 : 4}</div><div><p>Foto {shot} dari {selected === 2 || selected === 1 ? 8 : 4}. {retakes[shot] ?? 0}/2 pengambilan ulang.</p><p>Capture disimulasikan, kamera tidak digunakan.</p><div className="kiosk-actions"><button className="nb-button" onClick={() => setShot((value) => value >= (selected ? 8 : 4) ? 1 : value + 1)}>Ambil foto {shot === (selected ? 8 : 4) ? "lagi" : "berikutnya"}</button><button disabled={(retakes[shot] ?? 0) >= 2} className="nb-button" style={{ background: "var(--nb-cyan)" }} onClick={() => { setRetakes((value) => ({ ...value, [shot]: (value[shot] ?? 0) + 1 })); setNotice(`Foto ${shot} diulang (demo).`); }}>Ulangi foto</button><button className="nb-button" style={{ background: "var(--nb-pink)" }} onClick={() => setZoom((value) => value === 1 ? 1.25 : 1)}>Zoom {zoom > 1 ? "100%" : "125%"}</button></div><p aria-live="polite">{notice}</p><div className="kiosk-actions">{button("Lanjut ke editor", "/kiosk/editor")}</div></div></div>;
+      content = <div className="kiosk-landscape"><div className="kiosk-photo kiosk-capture" style={{ transform: `scale(${zoom})` }}>{shot} / {packageInfo.photoCount}</div><div><p>Foto {shot} dari {packageInfo.photoCount}. {retakes[shot] ?? 0}/2 pengambilan ulang.</p><label htmlFor="photo-file">Pilih hasil capture</label><input id="photo-file" type="file" accept="image/jpeg,image/png" className="nb-input" onChange={async (event) => { const file = event.target.files?.[0]; if (!file || !sessionId) return; const body = new FormData(); body.set("file", file); body.set("order_index", String(shot - 1)); const response = await api(`/api/kiosk/session/${sessionId}/photos`, { method: "POST", body }); setNotice(response.ok ? `Foto ${shot} tersimpan.` : "Upload foto gagal, coba lagi."); }} /><div className="kiosk-actions"><button className="nb-button" onClick={() => setShot((value) => value >= packageInfo.photoCount ? 1 : value + 1)}>Foto berikutnya</button><button disabled={(retakes[shot] ?? 0) >= 2} className="nb-button" style={{ background: "var(--nb-cyan)" }} onClick={() => { setRetakes((value) => ({ ...value, [shot]: (value[shot] ?? 0) + 1 })); setNotice(`Foto ${shot} diulang.`); }}>Ulangi foto</button><button className="nb-button" style={{ background: "var(--nb-pink)" }} onClick={() => setZoom((value) => value === 1 ? 1.25 : 1)}>Zoom {zoom > 1 ? "100%" : "125%"}</button></div><p aria-live="polite">{notice}</p><div className="kiosk-actions">{button("Lanjut ke editor", "/kiosk/editor")}</div></div></div>;
       break;
     case "/kiosk/editor":
       title = "Atur hasil fotomu";
@@ -114,7 +130,7 @@ export default function KioskScreen() {
       break;
     case "/kiosk/hasil":
       title = "Hasil fotomu siap!";
-      content = <><p>Terima kasih sudah berfoto bersama SnapArcade.</p><div className="kiosk-code">▦<br/>QR unduhan demo<br/><small>Tidak mengarah ke file foto</small></div><p>Cetak: {copies} copy · {packageInfo.detail}</p><div className="kiosk-actions">{button("Selesai, kembali ke awal", "/kiosk/idle")}{button("Foto lagi", "/kiosk/pilih-paket", true)}</div></>;
+      content = <><p>Terima kasih sudah berfoto bersama SnapArcade.</p><div className="kiosk-code"><strong>QR hasil foto</strong><br/>{qrUrl || "QR sedang dimuat"}<br/><small>Scan untuk membuka gallery.</small></div><p>Cetak: {copies} copy · {packageInfo.detail}</p><div className="kiosk-actions">{button("Selesai, kembali ke awal", "/kiosk/idle")}{button("Foto lagi", "/kiosk/pilih-paket", true)}</div></>;
       break;
     default:
       title = "Halaman kiosk tidak ditemukan";

@@ -10,6 +10,8 @@
     "auth:check": "tsx src/lib/auth-policy.check.ts",
     "payment-crypto:check": "tsx src/lib/payment-crypto.check.ts",
     "kiosk-auth:check": "tsx --conditions react-server --env-file=.env.local src/lib/kiosk-auth.check.ts",
+    "kiosk-session:check": "tsx --conditions react-server --env-file=.env.local src/lib/kiosk-session.check.ts",
+    "printer-usb:check": "tsx src/lib/printer-usb.check.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts"
