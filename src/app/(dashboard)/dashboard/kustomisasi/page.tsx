@@ -1,3 +1,5 @@
 import { OwnerPage } from "@/components/owner-page";
+import { loadDashboardData } from "@/lib/dashboard-data";
+import { redirect } from "next/navigation";
 
-export default function CustomizePage() { return <OwnerPage page="customize" />; }
+export default async function CustomizePage() { const data = await loadDashboardData(); if (!data) redirect("/"); if (data.role !== "owner") redirect(data.role === "superadmin" ? "/admin" : "/staff"); return <OwnerPage page="customize" data={data} />; }

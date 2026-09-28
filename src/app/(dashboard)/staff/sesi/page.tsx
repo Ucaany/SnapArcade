@@ -1,5 +1,5 @@
 import { StaffPage } from "@/components/staff-page";
+import { loadDashboardData } from "@/lib/dashboard-data";
+import { redirect } from "next/navigation";
 
-export default function StaffSessionsPage() {
-  return <StaffPage page="sessions" />;
-}
+export default async function StaffSessionsPage() { const data = await loadDashboardData(); if (!data) redirect("/"); if (data.role !== "staff") redirect(data.role === "superadmin" ? "/admin" : "/dashboard"); return <StaffPage page="sessions" data={data} />; }

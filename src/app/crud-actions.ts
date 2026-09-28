@@ -4,7 +4,7 @@ import { and, eq, gt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
-import { kioskPackages, kiosks, owners, paymentCredentials, profiles, staffAssignments, subscriptionPlans, subscriptions, vouchers } from "@/db/schema";
+import { kioskPackages, kiosks, notifications, owners, paymentCredentials, profiles, staffAssignments, subscriptionPlans, subscriptions, vouchers } from "@/db/schema";
 import { db } from "@/db";
 import { audit, failure, getActor, ownerForResource, permits, transact, type ActionResult } from "@/lib/server-actions";
 import { encryptCredential } from "@/lib/payment-crypto";
@@ -47,9 +47,9 @@ export async function deleteKiosk(id: string) {
   const r = await transact(a, "kiosk.deleted", ownerId, async (tx) => (await tx.delete(kiosks).where(and(eq(kiosks.id, id), eq(kiosks.ownerId, ownerId))).returning({ id: kiosks.id }))[0] ?? null, id);
   if (r.ok && !r.data) return result("not_found"); refresh(a.role === "superadmin"); return r;
 }
-export async function generatePairingCode(id: string) {
-  const a = await actor(); if (!a || !permits(a)) return result("unauthorized"); if (!uuid.safeParse(id).success) return result();
-  const ownerId = await ownerForResource(kiosks, id); if (!ownerId) return result("not_found"); if (!permits(a, ownerId)) return result("unauthorized");
+export async function generatePairingCode(id: string): Promise<{ ok: true; data: { id: string; pairingCode: string; pairingCodeExpiresAt: Date | null } } | { ok: false; error: "invalid" | "unauthorized" | "not_found" | "conflict" | "failed" }> {
+  const a = await actor(); if (!a || !permits(a) || a.role === "staff") return { ok: false, error: "unauthorized" }; if (!uuid.safeParse(id).success) return { ok: false, error: "invalid" };
+  const ownerId = await ownerForResource(kiosks, id); if (!ownerId) return { ok: false, error: "not_found" }; if (!permits(a, ownerId)) return { ok: false, error: "unauthorized" };
   try {
     const data = await db.transaction(async (tx) => {
       for (let i = 0; i < 8; i++) {
@@ -57,12 +57,12 @@ export async function generatePairingCode(id: string) {
         const [collision] = await tx.select({ id: kiosks.id }).from(kiosks).where(and(eq(kiosks.pairingCode, code), gt(kiosks.pairingCodeExpiresAt, new Date()))).limit(1);
         if (collision && collision.id !== id) continue;
         const [row] = await tx.update(kiosks).set({ pairingCode: code, pairingCodeExpiresAt: new Date(Date.now() + 900_000), pairingTokenHash: null, status: "pairing" }).where(and(eq(kiosks.id, id), eq(kiosks.ownerId, ownerId))).returning({ id: kiosks.id, pairingCode: kiosks.pairingCode, pairingCodeExpiresAt: kiosks.pairingCodeExpiresAt });
-        if (!row) return null; await audit(tx, a, "kiosk.pairing_code.generated", ownerId, id); return row;
+        if (!row?.pairingCode) return null; await audit(tx, a, "kiosk.pairing_code.generated", ownerId, id); return row;
       }
       throw Object.assign(new Error("collision"), { code: "23505" });
     });
-    refresh(a.role === "superadmin"); return data ? { ok: true as const, data } : result("not_found");
-  } catch (e) { return failure(e); }
+    refresh(a.role === "superadmin"); return data ? { ok: true as const, data: { ...data, pairingCode: data.pairingCode! } } : { ok: false, error: "not_found" };
+  } catch (e) { const failed = failure(e); return { ok: false, error: failed.ok ? "failed" as const : failed.error }; }
 }
 
 async function saveTenant(table: any, id: string | null, input: unknown, schema: z.ZodTypeAny, action: string): Promise<ActionResult> {
@@ -106,7 +106,7 @@ export async function savePaymentCredential(id: string | null, input: unknown) {
 export async function deletePaymentCredential(id: string) { return deleteTenant(paymentCredentials, id, "payment_credential"); }
 
 export async function assignStaff(staffId: string, kioskId: string, assign: boolean) {
-  const a = await actor(); if (!a || !permits(a)) return result("unauthorized"); if (!uuid.safeParse(staffId).success || !uuid.safeParse(kioskId).success || typeof assign !== "boolean") return result();
+  const a = await actor(); if (!a || a.role !== "owner" || !a.ownerId) return result("unauthorized"); if (!uuid.safeParse(staffId).success || !uuid.safeParse(kioskId).success || typeof assign !== "boolean") return result();
   const [kiosk] = await db.select({ ownerId: kiosks.ownerId }).from(kiosks).where(eq(kiosks.id, kioskId)).limit(1);
   const [staff] = await db.select({ role: profiles.role, ownerUserId: profiles.ownerId }).from(profiles).where(eq(profiles.id, staffId)).limit(1);
   const [staffOwner] = staff?.ownerUserId ? await db.select({ id: owners.id }).from(owners).where(eq(owners.userId, staff.ownerUserId)).limit(1) : [];
@@ -116,6 +116,18 @@ export async function assignStaff(staffId: string, kioskId: string, assign: bool
     await tx.delete(staffAssignments).where(and(eq(staffAssignments.staffId, staffId), eq(staffAssignments.kioskId, kioskId))); return { id: kioskId };
   }, kioskId);
   refresh(); return r;
+}
+
+export async function markNotificationRead(id: string) {
+  const a = await actor();
+  if (!a) return result("unauthorized");
+  if (!uuid.safeParse(id).success) return result();
+  const [row] = await db.update(notifications).set({ isRead: true })
+    .where(and(eq(notifications.id, id), eq(notifications.userId, a.userId)))
+    .returning({ id: notifications.id });
+  if (!row) return result("not_found");
+  revalidatePath(a.role === "superadmin" ? "/admin" : a.role === "staff" ? "/staff" : "/dashboard");
+  return { ok: true as const, data: row };
 }
 
 export async function saveSubscriptionPlan(id: string | null, input: unknown) {
