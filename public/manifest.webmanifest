@@ -1,0 +1,12 @@
+{
+  "name": "SnapArcade Kiosk",
+  "short_name": "SnapArcade",
+  "description": "Mode kiosk demo SnapArcade",
+  "lang": "id-ID",
+  "start_url": "/kiosk",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#FFFDF0",
+  "theme_color": "#FFD60A"
+}

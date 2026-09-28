@@ -211,4 +211,24 @@ button, input, textarea, select { font: inherit; }
   font-family: var(--font-inter), sans-serif;
 }
 
-.dashboard-theme { color-scheme: light; }
+.dashboard-theme {
+  color-scheme: light;
+  --primary: oklch(0.546 0.215 262.9);
+  --primary-foreground: oklch(1 0 0);
+  --chart-1: oklch(0.546 0.215 262.9);
+  --chart-2: oklch(0.65 0.15 180);
+  --chart-3: oklch(0.72 0.16 75);
+  --chart-4: oklch(0.62 0.19 320);
+  --chart-5: oklch(0.62 0.19 25);
+  --sidebar-primary: oklch(0.546 0.215 262.9);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.94 0.025 260);
+  --sidebar-accent-foreground: oklch(0.3 0.08 260);
+}
+
+.kiosk-theme {
+  color-scheme: light;
+  --background: var(--nb-background);
+  --foreground: var(--nb-ink);
+  font-family: var(--font-inter), sans-serif;
+}
