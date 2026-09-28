@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "auth:check": "tsx src/lib/auth-policy.check.ts",
+    "payment-crypto:check": "tsx src/lib/payment-crypto.check.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts"
