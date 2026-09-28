@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "auth:check": "tsx src/lib/auth-policy.check.ts",
     "payment-crypto:check": "tsx src/lib/payment-crypto.check.ts",
+    "pakasir:check": "tsx src/lib/pakasir.check.ts",
     "kiosk-auth:check": "tsx --conditions react-server --env-file=.env.local src/lib/kiosk-auth.check.ts",
     "kiosk-session:check": "tsx --conditions react-server --env-file=.env.local src/lib/kiosk-session.check.ts",
     "printer-usb:check": "tsx src/lib/printer-usb.check.ts",
