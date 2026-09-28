@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Bell, Camera, CreditCard, LayoutDashboard, Mail, Package, Settings, ShieldCheck, Users, Wallet, Ticket, Palette, ClipboardList, PlugZap, Wrench } from "lucide-react";
+import { Activity, Bell, Camera, CreditCard, LayoutDashboard, Mail, Package, Settings, ShieldCheck, Users, Wallet, Ticket, Palette, ClipboardList, PlugZap, Wrench, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton,
-  SidebarMenuItem, SidebarProvider, SidebarRail, SidebarTrigger,
+  SidebarMenuItem, SidebarProvider, SidebarTrigger,
 } from "@/components/ui/sidebar08/sidebar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { NotificationBell } from "@/components/notification-bell";
 
 const links = [
   { href: "/dashboard", label: "Ringkasan", icon: LayoutDashboard },
@@ -41,7 +43,6 @@ const adminLinks = [
 
 const staffLinks = [
   { href: "/staff", label: "Ringkasan", icon: LayoutDashboard },
-  { href: "/staff/mesin/wedding-andini-bagas", label: "Detail kiosk", icon: Camera },
   { href: "/staff/sesi", label: "Riwayat sesi", icon: ClipboardList },
   { href: "/staff/hardware", label: "Diagnostik hardware", icon: Wrench },
   { href: "/staff/notifikasi", label: "Notifikasi", icon: Bell },
@@ -56,7 +57,7 @@ export function DashboardShell({ children }: Readonly<{ children: React.ReactNod
   const basePath = isAdmin ? "/admin" : isStaff ? "/staff" : "/dashboard";
 
   return <SidebarProvider>
-    <Sidebar collapsible="icon" variant="inset">
+    <Sidebar collapsible="offcanvas" variant="inset">
       <SidebarHeader className="gap-3 p-4">
         <Link className="flex h-10 items-center gap-2 px-2 text-lg font-bold tracking-tight" href={basePath}>
           <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground"><Camera className="size-4" /></span>
@@ -82,14 +83,21 @@ export function DashboardShell({ children }: Readonly<{ children: React.ReactNod
           <div className="min-w-0"><p className="truncate text-sm font-medium">SnapArcade</p><p className="text-xs text-muted-foreground">{isAdmin ? "Superadmin" : isStaff ? "Staff Operasional" : "Workspace Owner"}</p></div>
         </div>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
     <SidebarInset className="min-w-0">
       <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur md:px-6">
         <div className="flex min-w-0 items-center gap-3"><SidebarTrigger className="size-10" />
           <Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbLink href={basePath}>{isAdmin ? "Superadmin" : isStaff ? "Staff" : "Dashboard"}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbPage>{page}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
         </div>
-        <Link href={`${basePath}/notifikasi`} aria-label="Notifikasi" className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border hover:bg-muted"><Bell className="size-4" /></Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <NotificationBell href={isAdmin ? "/admin/notifikasi" : isStaff ? "/staff/notifikasi" : "/dashboard/notifikasi"} />
+          <DropdownMenu>
+            <DropdownMenuTrigger aria-label="Buka menu akun" className="inline-flex size-10 items-center justify-center rounded-full border bg-muted text-sm font-semibold">SA</DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56"><DropdownMenuLabel>{isAdmin ? "Superadmin" : isStaff ? "Staff Operasional" : "Workspace Owner"}</DropdownMenuLabel><DropdownMenuSeparator />
+              <DropdownMenuItem render={<Link href="/masuk" />}><LogOut />Keluar (demo)</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
       <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
     </SidebarInset>
