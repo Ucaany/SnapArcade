@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const steps = ["/kiosk", "/kiosk/pair", "/kiosk/idle", "/kiosk/pilih-paket", "/kiosk/pembayaran", "/kiosk/voucher", "/kiosk/sesi", "/kiosk/editor", "/kiosk/preview-cetak", "/kiosk/mencetak", "/kiosk/hasil"];
-const packages = [{ name: "Satu Strip", detail: "4 foto · 1 strip", price: 25000 }, { name: "Dua Strip", detail: "8 foto · 2 strip", price: 40000 }];
+const packages = [{ name: "Satu Strip", detail: "4 foto · 1 strip", price: 25000 }, { name: "Dua Strip", detail: "8 foto · 2 strip", price: 40000 }, { name: "Pesta Foto", detail: "8 foto · 3 strip", price: 55000 }];
+const frames = ["Pop Art", "Retro 90s", "Pesta", "Klasik", "Warna-warni"];
 
 export default function KioskScreen() {
   const path = usePathname();
@@ -18,6 +19,15 @@ export default function KioskScreen() {
   const [copies, setCopies] = useState(1);
   const [notice, setNotice] = useState("");
   const [progress, setProgress] = useState(0);
+  const [paymentLeft, setPaymentLeft] = useState(300);
+  const [paymentState, setPaymentState] = useState("Menunggu pembayaran simulasi");
+  const [retakes, setRetakes] = useState<Record<number, number>>({});
+  const [zoom, setZoom] = useState(1);
+  const [frame, setFrame] = useState(0);
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [saturation, setSaturation] = useState(100);
+  const [slide, setSlide] = useState(0);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("snaparcade-kiosk");
@@ -35,6 +45,21 @@ export default function KioskScreen() {
     if (path !== "/kiosk/mencetak") return;
     setProgress(0);
     const timer = window.setInterval(() => setProgress((value) => value >= 100 ? 100 : value + 10), 350);
+    return () => window.clearInterval(timer);
+  }, [path]);
+  useEffect(() => {
+    if (path !== "/kiosk/pembayaran" || paymentLeft <= 0 || paymentState === "Pembayaran berhasil (simulasi)") return;
+    const timer = window.setInterval(() => setPaymentLeft((left) => Math.max(0, left - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [path, paymentLeft, paymentState]);
+  useEffect(() => {
+    if (path !== "/kiosk/pembayaran" || paymentLeft === 0 || paymentState === "Pembayaran berhasil (simulasi)") return;
+    const poll = window.setInterval(() => setPaymentState("Memeriksa status demo..."), 3000);
+    return () => window.clearInterval(poll);
+  }, [path, paymentLeft, paymentState]);
+  useEffect(() => {
+    if (path !== "/kiosk/idle") return;
+    const timer = window.setInterval(() => setSlide((value) => (value + 1) % frames.length), 2800);
     return () => window.clearInterval(timer);
   }, [path]);
 
@@ -56,7 +81,7 @@ export default function KioskScreen() {
       break;
     case "/kiosk/idle":
       title = "Yuk, bikin foto seru!";
-      content = <><div className="kiosk-photo" aria-label="Contoh layar foto">SNAP!</div><p>Pilih paket, berpose, lalu bawa pulang hasil fotomu.</p><div className="kiosk-actions">{button("Mulai foto", "/kiosk/pilih-paket")}{button("Pengaturan kiosk", "/kiosk/pair", true)}</div></>;
+      content = <><div className={`kiosk-photo kiosk-slide kiosk-slide-${slide}`} aria-label={`Contoh slideshow foto: ${frames[slide]}`}><span>{frames[slide]}</span></div><div className="kiosk-dots" aria-label={`Slide ${slide + 1} dari ${frames.length}`}>{frames.map((item, index) => <span key={item} className={index === slide ? "is-active" : ""}/>)}</div><p>Pilih paket, berpose, lalu bawa pulang hasil fotomu.</p><div className="kiosk-actions">{button("Mulai foto", "/kiosk/pilih-paket")}{button("Pengaturan kiosk", "/kiosk/pair", true)}</div></>;
       break;
     case "/kiosk/pilih-paket":
       title = "Pilih paket foto";
@@ -64,7 +89,8 @@ export default function KioskScreen() {
       break;
     case "/kiosk/pembayaran":
       title = "Pembayaran demo";
-      content = <><p>{packageInfo.name} · Rp{packageInfo.price.toLocaleString("id-ID")}</p><div className="kiosk-code">QRIS / E-Wallet<br/>Pratinjau saja, tidak dapat dipindai</div><p aria-live="polite">Menunggu pembayaran simulasi</p><div className="kiosk-actions"><button className="nb-button" onClick={() => go("/kiosk/sesi")}>Simulasikan pembayaran berhasil</button>{button("Gunakan voucher", "/kiosk/voucher", true)}{button("Ganti paket", "/kiosk/pilih-paket", true)}</div></>;
+      title = paymentLeft ? "Pindai untuk membayar" : "Waktu pembayaran habis";
+      content = <><p>{packageInfo.name} · Rp{packageInfo.price.toLocaleString("id-ID")}</p><div className="kiosk-payment-layout"><div className="kiosk-qr" aria-label="QR pembayaran dummy, tidak dapat dipindai"><span>QRIS</span><small>SIMULASI</small></div><div><strong className="kiosk-timer" aria-live="polite">{String(Math.floor(paymentLeft / 60)).padStart(2, "0")}:{String(paymentLeft % 60).padStart(2, "0")}</strong><p aria-live="polite">{paymentLeft ? paymentState : "Transaksi demo kedaluwarsa. Tidak ada pembayaran diproses."}</p><small>Pemeriksaan status demo setiap 3 detik. QR ini tidak dapat dipindai.</small></div></div><div className="kiosk-actions"><button disabled={!paymentLeft} className="nb-button" onClick={() => { setPaymentState("Pembayaran berhasil (simulasi)"); go("/kiosk/sesi"); }}>Simulasikan pembayaran berhasil</button>{button("Gunakan voucher", "/kiosk/voucher", true)}{button("Ganti paket", "/kiosk/pilih-paket", true)}</div></>;
       break;
     case "/kiosk/voucher":
       title = "Punya kode voucher?";
@@ -72,11 +98,11 @@ export default function KioskScreen() {
       break;
     case "/kiosk/sesi":
       title = "Saatnya berpose!";
-      content = <div className="kiosk-landscape"><div className="kiosk-photo">{shot} / {selected ? 8 : 4}</div><div><p>Foto {shot} dari {selected ? 8 : 4}</p><p>Ambil foto disimulasikan, kamera tidak digunakan.</p><div className="kiosk-actions"><button className="nb-button" onClick={() => setShot((value) => value >= (selected ? 8 : 4) ? 1 : value + 1)}>Ambil foto berikutnya</button><button className="nb-button" style={{ background: "var(--nb-cyan)" }} onClick={() => setNotice(`Foto ${shot} diulang (demo).`)}>Ulangi foto</button><button className="nb-button" style={{ background: "var(--nb-pink)" }} onClick={() => setFilter(filter === "Warna asli" ? "Hitam putih" : "Warna asli")}>Filter: {filter}</button></div><p aria-live="polite">{notice}</p><div className="kiosk-actions">{button("Lanjut ke editor", "/kiosk/editor")}</div></div></div>;
+      content = <div className="kiosk-landscape"><div className="kiosk-photo kiosk-capture" style={{ transform: `scale(${zoom})` }}>{shot} / {selected === 2 ? 8 : selected === 1 ? 8 : 4}</div><div><p>Foto {shot} dari {selected === 2 || selected === 1 ? 8 : 4}. {retakes[shot] ?? 0}/2 pengambilan ulang.</p><p>Capture disimulasikan, kamera tidak digunakan.</p><div className="kiosk-actions"><button className="nb-button" onClick={() => setShot((value) => value >= (selected ? 8 : 4) ? 1 : value + 1)}>Ambil foto {shot === (selected ? 8 : 4) ? "lagi" : "berikutnya"}</button><button disabled={(retakes[shot] ?? 0) >= 2} className="nb-button" style={{ background: "var(--nb-cyan)" }} onClick={() => { setRetakes((value) => ({ ...value, [shot]: (value[shot] ?? 0) + 1 })); setNotice(`Foto ${shot} diulang (demo).`); }}>Ulangi foto</button><button className="nb-button" style={{ background: "var(--nb-pink)" }} onClick={() => setZoom((value) => value === 1 ? 1.25 : 1)}>Zoom {zoom > 1 ? "100%" : "125%"}</button></div><p aria-live="polite">{notice}</p><div className="kiosk-actions">{button("Lanjut ke editor", "/kiosk/editor")}</div></div></div>;
       break;
     case "/kiosk/editor":
       title = "Atur hasil fotomu";
-      content = <><div className="kiosk-landscape"><div className="kiosk-strip"><span>SNAP</span><span>ARCADE</span><span>{filter}</span><span>FOTO</span></div><div><label htmlFor="brightness">Kecerahan</label><input id="brightness" type="range" min="50" max="150" defaultValue="100"/><p>Pilih tampilan foto</p><div className="kiosk-actions"><button className="nb-button" onClick={() => setFilter("Warna asli")}>Warna asli</button><button className="nb-button" style={{ background: "var(--nb-pink)" }} onClick={() => setFilter("Hitam putih")}>Hitam putih</button><button className="nb-button" style={{ background: "var(--nb-cyan)" }} onClick={() => setFilter("Hangat")}>Hangat</button></div></div></div><div className="kiosk-actions">{button("Lihat preview cetak", "/kiosk/preview-cetak")}</div></>;
+      content = <><div className="kiosk-landscape"><div className={`kiosk-strip kiosk-frame-${frame}`} style={{ filter: `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)` }}>{[0, 1, 2, 3].map((i) => <span key={i}>FOTO {i + 1}</span>)}<b>{frames[frame]}</b></div><div><label htmlFor="brightness">Kecerahan {brightness}%</label><input id="brightness" type="range" min="50" max="150" value={brightness} onChange={(e) => setBrightness(Number(e.target.value))}/><label htmlFor="contrast">Kontras {contrast}%</label><input id="contrast" type="range" min="50" max="150" value={contrast} onChange={(e) => setContrast(Number(e.target.value))}/><label htmlFor="saturation">Saturasi {saturation}%</label><input id="saturation" type="range" min="0" max="180" value={saturation} onChange={(e) => setSaturation(Number(e.target.value))}/><p>Pilih frame</p><div className="kiosk-frame-picker">{frames.map((name, index) => <button key={name} className="nb-button" aria-pressed={frame === index} style={{ background: ["var(--nb-primary)", "var(--nb-pink)", "var(--nb-cyan)", "white", "var(--nb-lime)"][index] }} onClick={() => setFrame(index)}>{name}</button>)}</div><p className="kiosk-note">Filter diterapkan sebagai pratinjau CSS; foto kamera belum tersedia.</p></div></div><div className="kiosk-actions">{button("Lihat preview cetak", "/kiosk/preview-cetak")}</div></>;
       break;
     case "/kiosk/preview-cetak":
       title = "Preview cetak";
