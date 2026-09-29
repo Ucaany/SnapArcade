@@ -3,10 +3,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { invoices, subscriptions } from "@/db/schema";
 import { verifyPakasirSignature } from "@/lib/pakasir";
-import { providerIpAllowed } from "@/lib/security";
 
 export async function POST(request: Request) {
-  if (!providerIpAllowed(request, "PAKASIR_WEBHOOK_IPS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const rawBody = await request.text();
   const signature = request.headers.get("x-pakasir-signature") ?? request.headers.get("x-signature");
   if (!verifyPakasirSignature(rawBody, signature)) return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
