@@ -3,6 +3,7 @@ import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { activityLogs, invitations, invoices, kiosks, notifications, owners, paymentCredentials, profiles, sessions, staffAssignments, subscriptionPlans, subscriptions, transactions, vouchers } from "@/db/schema";
 import { getActor } from "@/lib/server-actions";
+import { loadOwnerAnalytics } from "@/lib/analytics";
 
 export async function loadDashboardData() {
   const actor = await getActor();
@@ -39,7 +40,7 @@ export async function loadDashboardData() {
   }
   if (actor.role === "staff") return { role: "staff" as const, kiosks: kioskRows, sessions: sessionRows, notifications: noticeRows };
   const ownerId = actor.ownerId!;
-  const [voucherRows, subscriptionRows, invoiceRows, transactionRows, staffRows, profile, ownOwner, planRows, kioskCounts] = await Promise.all([
+  const [voucherRows, subscriptionRows, invoiceRows, transactionRows, staffRows, profile, ownOwner, planRows, kioskCounts, analytics] = await Promise.all([
     actor.role === "owner" ? db.select().from(vouchers).where(eq(vouchers.ownerId, ownerId)).orderBy(desc(vouchers.createdAt)).limit(500) : [],
     actor.role === "owner" ? db.select().from(subscriptions).where(eq(subscriptions.ownerId, ownerId)).orderBy(desc(subscriptions.createdAt)).limit(50) : [],
     actor.role === "owner" ? db.select().from(invoices).where(eq(invoices.ownerId, ownerId)).orderBy(desc(invoices.createdAt)).limit(100) : [],
@@ -49,7 +50,8 @@ export async function loadDashboardData() {
     db.select().from(owners).where(eq(owners.id, ownerId)).limit(1).then((rows) => rows[0]),
     db.select().from(subscriptionPlans).where(eq(subscriptionPlans.isActive, true)).orderBy(subscriptionPlans.monthlyPriceIdr),
     db.select({ status: kiosks.status, count: sql<number>`count(*)::int` }).from(kiosks).where(eq(kiosks.ownerId, ownerId)).groupBy(kiosks.status),
+    loadOwnerAnalytics(ownerId),
   ]);
   const credentialRows = actor.role === "owner" ? await db.select({ id: paymentCredentials.id, provider: paymentCredentials.provider, label: paymentCredentials.label, isActive: paymentCredentials.isActive, isSandbox: paymentCredentials.isSandbox, lastVerifiedAt: paymentCredentials.lastVerifiedAt, createdAt: paymentCredentials.createdAt }).from(paymentCredentials).where(eq(paymentCredentials.ownerId, ownerId)) : [];
-  return { role: "owner" as const, profile, owner: ownOwner, kiosks: kioskRows, sessions: sessionRows, notifications: noticeRows, vouchers: voucherRows, subscriptions: subscriptionRows, invoices: invoiceRows, transactions: transactionRows, staff: staffRows, credentials: credentialRows, plans: planRows, kioskCounts };
+  return { role: "owner" as const, profile, owner: ownOwner, kiosks: kioskRows, sessions: sessionRows, notifications: noticeRows, vouchers: voucherRows, subscriptions: subscriptionRows, invoices: invoiceRows, transactions: transactionRows, staff: staffRows, credentials: credentialRows, plans: planRows, kioskCounts, analytics };
 }

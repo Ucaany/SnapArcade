@@ -36,6 +36,13 @@
       "when": 1790613600090,
       "tag": "0004_awesome_franklin_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790670000000,
+      "tag": "0005_monthly_owner_analytics",
+      "breakpoints": true
     }
   ]
 }

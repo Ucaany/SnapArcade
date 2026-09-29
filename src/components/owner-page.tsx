@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Activity, Camera, Check, CreditCard, Download, Plus, Search, Wallet } from "lucide-react";
+import { Activity, Camera, Check, CreditCard, Download, FileText, Plus, Search, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { PrinterPanel } from "@/components/printer-panel";
 import { useRouter } from "next/navigation";
 import { SubscriptionPaymentButton } from "@/components/subscription-payment-button";
 import { PaymentCredentials } from "@/components/payment-credentials";
+import { RevenueChart } from "@/components/revenue-chart";
 
 type Page = "overview" | "machines" | "machine-detail" | "sessions" | "transactions" | "vouchers" | "payment" | "customize" | "subscription" | "staff" | "notifications" | "settings";
 type OwnerData = Extract<NonNullable<Awaited<ReturnType<typeof loadDashboardData>>>, { profile: unknown }>;
@@ -57,15 +58,13 @@ function Frame({ children, empty, columns }: { children: React.ReactNode; empty:
 }
 
 function Overview({ data }: { data: OwnerData }) {
-  const today = new Date();
-  const paid = data.transactions.filter((transaction) => transaction.status === "settlement");
   const stats = [
-    { title: "Pendapatan hari ini", value: formatMoney(paid.filter((item) => item.createdAt.toDateString() === today.toDateString()).reduce((sum, item) => sum + item.amount, 0)), icon: Wallet },
-    { title: "Pendapatan bulan ini", value: formatMoney(paid.filter((item) => item.createdAt.getMonth() === today.getMonth() && item.createdAt.getFullYear() === today.getFullYear()).reduce((sum, item) => sum + item.amount, 0)), icon: CreditCard },
-    { title: "Total sesi termuat", value: String(data.sessions.length), icon: Activity },
+    { title: "Pendapatan hari ini", value: formatMoney(data.analytics.todayRevenue), icon: Wallet },
+    { title: "Pendapatan bulan ini", value: formatMoney(data.analytics.monthRevenue), icon: CreditCard },
+    { title: "Total sesi bulan ini", value: String(data.analytics.totalSessions), icon: Activity },
     { title: "Mesin online", value: `${data.kiosks.filter((item) => item.status === "online").length} / ${data.kiosks.length}`, icon: Camera },
   ];
-  return <div className="space-y-6"><Header page="overview" /><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(({ title, value, icon: Icon }) => <Card key={title}><CardHeader className="flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle><Icon className="size-4 text-muted-foreground" /></CardHeader><CardContent><p className="text-2xl font-semibold tabular-nums">{value}</p></CardContent></Card>)}</div><Card><CardHeader><CardTitle>Mesin</CardTitle></CardHeader><CardContent><Frame empty={!data.kiosks.length} columns={<TableRow><TableHead>Nama</TableHead><TableHead>Lokasi</TableHead><TableHead>Status</TableHead><TableHead>Sesi hari ini</TableHead></TableRow>}>{data.kiosks.map((machine) => <TableRow key={machine.id}><TableCell>{machine.name}</TableCell><TableCell>{machine.location ?? "-"}</TableCell><TableCell><Status value={machine.status} /></TableCell><TableCell>{machine.sessionsToday}</TableCell></TableRow>)}</Frame></CardContent></Card></div>;
+  return <div className="space-y-6"><Header page="overview" /><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(({ title, value, icon: Icon }) => <Card key={title}><CardHeader className="flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle><Icon className="size-4 text-muted-foreground" /></CardHeader><CardContent><p className="text-2xl font-semibold tabular-nums">{value}</p></CardContent></Card>)}</div><RevenueChart data={data.analytics.chart} /><Card><CardHeader><CardTitle>Mesin</CardTitle></CardHeader><CardContent><Frame empty={!data.kiosks.length} columns={<TableRow><TableHead>Nama</TableHead><TableHead>Lokasi</TableHead><TableHead>Status</TableHead><TableHead>Sesi hari ini</TableHead></TableRow>}>{data.kiosks.map((machine) => <TableRow key={machine.id}><TableCell>{machine.name}</TableCell><TableCell>{machine.location ?? "-"}</TableCell><TableCell><Status value={machine.status} /></TableCell><TableCell>{machine.sessionsToday}</TableCell></TableRow>)}</Frame></CardContent></Card></div>;
 }
 
 function Machines({ data, machineId }: { data: OwnerData; machineId?: string }) {
@@ -93,13 +92,8 @@ function Transactions({ data }: { data: OwnerData }) {
   const [filter, setFilter] = useState("all");
   const sessions = new Map(data.sessions.map((item) => [item.id, item.customerName ?? "Pelanggan"]));
   const rows = data.transactions.map((item) => ({ ref: item.gatewayReference ?? item.gatewayTransactionId ?? item.id, customer: sessions.get(item.sessionId) ?? "Pelanggan", amount: item.amount, provider: `${item.provider} ${item.method}`, status: item.status, date: item.createdAt.toLocaleString("id-ID") })).filter((item) => `${item.ref} ${item.customer}`.toLowerCase().includes(query.toLowerCase()) && (filter === "all" || item.status === filter));
-  const exportCsv = () => {
-    const fields = ["ref", "customer", "amount", "provider", "status", "date"] as const;
-    const csv = [fields.join(","), ...rows.map((row) => fields.map((field) => `"${String(row[field]).replaceAll('"', '""')}"`).join(","))].join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "transaksi.csv"; anchor.click(); URL.revokeObjectURL(url);
-  };
-  return <div className="space-y-6"><Header page="transactions" action={<Button variant="outline" onClick={exportCsv}><Download />Export CSV</Button>} /><Card><CardHeader><CardTitle>Transaksi customer</CardTitle></CardHeader><CardContent className="space-y-4"><div className="flex flex-col gap-2 sm:flex-row"><SearchBox value={query} onChange={setQuery} /><Select value={filter} onValueChange={(value) => setFilter(value ?? "all")}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem>{["settlement", "pending", "failed", "expired", "refunded"].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div><Frame empty={!rows.length} columns={<TableRow><TableHead>Referensi</TableHead><TableHead>Pelanggan</TableHead><TableHead>Jumlah</TableHead><TableHead>Gateway</TableHead><TableHead>Status</TableHead><TableHead>Waktu</TableHead></TableRow>}>{rows.map((row) => <TableRow key={row.ref}><TableCell>{row.ref}</TableCell><TableCell>{row.customer}</TableCell><TableCell>{formatMoney(row.amount)}</TableCell><TableCell>{row.provider}</TableCell><TableCell><Status value={row.status} /></TableCell><TableCell>{row.date}</TableCell></TableRow>)}</Frame></CardContent></Card></div>;
+  const exportUrl = (kind: string) => `/api/dashboard/export/${kind}?month=${new Date().toISOString().slice(0, 7)}`;
+  return <div className="space-y-6"><Header page="transactions" action={<div className="flex flex-wrap gap-2"><Button variant="outline" render={<a href={exportUrl("transactions")} />}><Download />CSV transaksi</Button><Button variant="outline" render={<a href={exportUrl("sessions")} />}><Download />CSV sesi</Button><Button render={<a href={exportUrl("monthly-pdf")} />}><FileText />PDF bulanan</Button></div>} /><Card><CardHeader><CardTitle>Transaksi customer</CardTitle></CardHeader><CardContent className="space-y-4"><div className="flex flex-col gap-2 sm:flex-row"><SearchBox value={query} onChange={setQuery} /><Select value={filter} onValueChange={(value) => setFilter(value ?? "all")}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem>{["settlement", "pending", "failed", "expired", "refunded"].map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div><Frame empty={!rows.length} columns={<TableRow><TableHead>Referensi</TableHead><TableHead>Pelanggan</TableHead><TableHead>Jumlah</TableHead><TableHead>Gateway</TableHead><TableHead>Status</TableHead><TableHead>Waktu</TableHead></TableRow>}>{rows.map((row) => <TableRow key={row.ref}><TableCell>{row.ref}</TableCell><TableCell>{row.customer}</TableCell><TableCell>{formatMoney(row.amount)}</TableCell><TableCell>{row.provider}</TableCell><TableCell><Status value={row.status} /></TableCell><TableCell>{row.date}</TableCell></TableRow>)}</Frame></CardContent></Card></div>;
 }
 
 function Vouchers({ data }: { data: OwnerData }) {
