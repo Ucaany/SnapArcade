@@ -8,6 +8,7 @@ import { midtransConfig, midtransRequest } from "@/lib/midtrans";
 import { xenditConfig, xenditRequest } from "@/lib/xendit";
 import { decryptCredential } from "@/lib/payment-crypto";
 import { tripayConfig, tripayCreateSignature, tripayRequest, type TripayTransaction } from "@/lib/tripay";
+import { rateLimit, rateLimited } from "@/lib/security";
 
 const input = z.object({ session_id: z.string().uuid(), amount: z.number().int().positive() }).strict();
 type TransactionRow = typeof transactions.$inferSelect;
@@ -17,6 +18,10 @@ type CreateOutcome = { error: string; status: number } | { transaction: Transact
 export async function POST(request: Request) {
   const auth = await authenticateKiosk(request);
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const limiter = await rateLimit(`kiosk:payment:${auth.kioskId}`, 10, 60);
+    if (!limiter.allowed) return rateLimited(limiter.retryAfter);
+  } catch { return NextResponse.json({ error: "Rate limiter unavailable" }, { status: 503 }); }
   const parsed = input.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Data tidak valid" }, { status: 400 });
   const outcome = await db.transaction(async (tx): Promise<CreateOutcome> => {

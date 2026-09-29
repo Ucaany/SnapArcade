@@ -4,8 +4,10 @@ import { db } from "@/db";
 import { paymentCredentials, transactions } from "@/db/schema";
 import { applyMidtransStatus, midtransConfig, midtransSignature, signaturesMatch } from "@/lib/midtrans";
 import { decryptCredential } from "@/lib/payment-crypto";
+import { providerIpAllowed } from "@/lib/security";
 
 export async function POST(request: Request) {
+  if (!providerIpAllowed(request, "MIDTRANS_WEBHOOK_IPS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const event = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!event || typeof event.order_id !== "string" || typeof event.status_code !== "string" || event.gross_amount === undefined || typeof event.signature_key !== "string") return NextResponse.json({ error: "Invalid event" }, { status: 400 });
   const [row] = await db.select({ transaction: transactions, credential: paymentCredentials }).from(transactions).innerJoin(paymentCredentials, eq(transactions.credentialId, paymentCredentials.id)).where(and(eq(transactions.gatewayReference, event.order_id), eq(transactions.provider, "midtrans"))).limit(1);

@@ -4,8 +4,10 @@ import { db } from "@/db";
 import { paymentCredentials, transactions } from "@/db/schema";
 import { applyTripayStatus, signaturesMatch, tripayCallbackSignature, tripayConfig, type TripayTransaction } from "@/lib/tripay";
 import { decryptCredential } from "@/lib/payment-crypto";
+import { providerIpAllowed } from "@/lib/security";
 
 export async function POST(request: Request) {
+  if (!providerIpAllowed(request, "TRIPAY_WEBHOOK_IPS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const rawBody = await request.text();
   let event: TripayTransaction;
   try { event = JSON.parse(rawBody) as TripayTransaction; } catch { return NextResponse.json({ success: false, message: "Invalid JSON" }, { status: 400 }); }

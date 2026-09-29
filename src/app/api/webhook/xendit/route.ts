@@ -4,8 +4,10 @@ import { db } from "@/db";
 import { paymentCredentials, transactions } from "@/db/schema";
 import { applyXenditStatus, xenditConfig, xenditTokensMatch, type XenditInvoice } from "@/lib/xendit";
 import { decryptCredential } from "@/lib/payment-crypto";
+import { providerIpAllowed } from "@/lib/security";
 
 export async function POST(request: Request) {
+  if (!providerIpAllowed(request, "XENDIT_WEBHOOK_IPS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const event = await request.json().catch(() => null) as XenditInvoice | null;
   if (!event || typeof event.external_id !== "string" || typeof event.status !== "string" || event.currency !== "IDR") return NextResponse.json({ error: "Invalid event" }, { status: 400 });
   const [row] = await db.select({ transaction: transactions, credential: paymentCredentials }).from(transactions).innerJoin(paymentCredentials, eq(transactions.credentialId, paymentCredentials.id)).where(and(eq(transactions.id, event.external_id), eq(transactions.provider, "xendit"))).limit(1);

@@ -9,8 +9,9 @@ import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { db } from "@/db";
 import { invitations, owners, profiles } from "@/db/schema";
+import { sanitizeText } from "@/lib/security";
 
-const credentials = z.object({ email: z.string().email().max(255), password: z.string().min(8).max(128) });
+const credentials = z.object({ email: z.string().email().max(255), password: z.string().min(8).max(128) }).strict();
 
 export async function signIn(_state: { error: string }, formData: FormData) {
   const parsed = credentials.safeParse(Object.fromEntries(formData));
@@ -29,7 +30,7 @@ export async function signOut() {
 }
 
 export async function inviteOwner(formData: FormData) {
-  const parsed = z.object({ email: z.string().email().max(255), fullName: z.string().trim().min(2).max(150), businessName: z.string().trim().min(2).max(200) }).safeParse(Object.fromEntries(formData));
+  const parsed = z.object({ email: z.string().email().max(255), fullName: z.string().trim().min(2).max(150), businessName: z.string().trim().min(2).max(200) }).strict().safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "Periksa kembali email, nama, dan nama bisnis." };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -39,7 +40,7 @@ export async function inviteOwner(formData: FormData) {
 
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 7 * 86400000);
-  await db.insert(invitations).values({ email: parsed.data.email.toLowerCase(), fullName: parsed.data.fullName, businessName: parsed.data.businessName, token, invitedBy: user.id, expiresAt });
+  await db.insert(invitations).values({ email: parsed.data.email.toLowerCase(), fullName: sanitizeText(parsed.data.fullName), businessName: sanitizeText(parsed.data.businessName), token, invitedBy: user.id, expiresAt });
   const site = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const { error } = await adminClient.auth.admin.inviteUserByEmail(parsed.data.email, { redirectTo: `${site}/auth/callback?token=${token}` });
   if (error) {
@@ -50,7 +51,7 @@ export async function inviteOwner(formData: FormData) {
 }
 
 export async function acceptInvitation(_state: { error: string }, formData: FormData) {
-  const parsed = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), businessName: z.string().trim().min(2).max(200), password: z.string().min(8).max(128) }).safeParse(Object.fromEntries(formData));
+  const parsed = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), businessName: z.string().trim().min(2).max(200), password: z.string().min(8).max(128) }).strict().safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "Data aktivasi tidak valid." };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -60,15 +61,16 @@ export async function acceptInvitation(_state: { error: string }, formData: Form
 
   const { error: passwordError } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (passwordError) return { error: "Password gagal disimpan. Coba kembali." };
-  const slugBase = parsed.data.businessName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "bisnis";
+  const businessName = sanitizeText(parsed.data.businessName);
+  const slugBase = businessName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "bisnis";
   try {
     await db.transaction(async (tx) => {
-      await tx.insert(profiles).values({ id: user.id, email: user.email!.toLowerCase(), fullName: invitation.fullName, role: "owner", status: "active" });
+       await tx.insert(profiles).values({ id: user.id, email: user.email!.toLowerCase(), fullName: sanitizeText(invitation.fullName), role: "owner", status: "active" });
       let created = false;
       for (let suffix = 0; suffix < 100; suffix++) {
         const slug = suffix ? `${slugBase}-${suffix + 1}` : slugBase;
         try {
-          await tx.insert(owners).values({ userId: user.id, businessName: parsed.data.businessName, slug, status: "active" });
+           await tx.insert(owners).values({ userId: user.id, businessName, slug, status: "active" });
           created = true;
           break;
         } catch (error) {

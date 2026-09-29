@@ -11,6 +11,7 @@ import { encryptCredential } from "@/lib/payment-crypto";
 import { printerSettingsSchema } from "@/lib/printer-settings";
 import { decryptCredential } from "@/lib/payment-crypto";
 import { verifyPaymentCredential as verifyProviderCredential, type PaymentProvider } from "@/lib/payment-verify";
+import { sanitizeText } from "@/lib/security";
 
 const uuid = z.string().uuid();
 const nonnegative = z.number().int().nonnegative();
@@ -27,7 +28,8 @@ export async function updateOwner(id: string, input: unknown) {
   const a = await actor(); const p = z.object({ businessName: z.string().trim().min(2).max(200).optional(), address: z.string().max(2000).nullable().optional(), city: z.string().max(100).nullable().optional(), phone: z.string().max(30).nullable().optional(), status: z.enum(["pending", "active", "suspended"]).optional() }).strict().safeParse(input);
   if (!a) return result("unauthorized"); if (!uuid.safeParse(id).success || !p.success) return result();
   if (!permits(a, id) || (a.role !== "superadmin" && p.data.status !== undefined)) return result("unauthorized");
-  const r = await transact(a, "owner.updated", id, async (tx) => (await tx.update(owners).set(p.data).where(eq(owners.id, id)).returning({ id: owners.id }))[0] ?? null);
+  const values = Object.fromEntries(Object.entries(p.data).map(([key, value]) => [key, typeof value === "string" ? sanitizeText(value) : value]));
+  const r = await transact(a, "owner.updated", id, async (tx) => (await tx.update(owners).set(values).where(eq(owners.id, id)).returning({ id: owners.id }))[0] ?? null);
   if (r.ok && !r.data) return result("not_found"); refresh(a.role === "superadmin"); return r;
 }
 
@@ -40,7 +42,7 @@ export async function saveKiosk(id: string | null, input: unknown) {
   if (!a || !permits(a)) return result("unauthorized"); if (!p.success || (id && !uuid.safeParse(id).success)) return result();
   const ownerId = a.role === "superadmin" ? p.data.ownerId : a.ownerId; if (!ownerId || !permits(a, ownerId)) return result("unauthorized");
   const r = await transact(a, id ? "kiosk.updated" : "kiosk.created", ownerId, async (tx) => {
-    const values = { name: p.data.name, location: p.data.location, sessionLimit: p.data.sessionLimit, theme: p.data.theme as any, cameraSettings: p.data.cameraSettings as any, printerSettings: p.data.printerSettings as any };
+    const values = { name: sanitizeText(p.data.name), location: p.data.location ? sanitizeText(p.data.location) : p.data.location, sessionLimit: p.data.sessionLimit, theme: p.data.theme as any, cameraSettings: p.data.cameraSettings as any, printerSettings: p.data.printerSettings as any };
     return id ? (await tx.update(kiosks).set(values).where(and(eq(kiosks.id, id), eq(kiosks.ownerId, ownerId))).returning({ id: kiosks.id }))[0] ?? null : (await tx.insert(kiosks).values({ ...values, ownerId }).returning({ id: kiosks.id }))[0];
   }, id);
   if (r.ok && !r.data) return result("not_found"); refresh(a.role === "superadmin"); return r;

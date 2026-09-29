@@ -4,14 +4,17 @@ import { db } from "@/db";
 import { kiosks, subscriptionPlans, subscriptions } from "@/db/schema";
 import { badRequest, conflict, json, notFound, serverError } from "@/lib/kiosk-api";
 import { PAIRING_CODE, generateKioskToken, hashToken } from "@/lib/kiosk-auth";
+import { clientIp, rateLimit, rateLimited } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
-// ponytail: no production rate limiting on this endpoint — PRD requires it but no shared
-// limiter (Upstash/Cloudflare KV) is configured; enforce at platform level (e.g. Vercel WAF).
 const bodySchema = z.object({ pairing_code: z.string().regex(PAIRING_CODE) }).strict();
 
 export async function POST(request: Request) {
+  try {
+    const limiter = await rateLimit(`kiosk:pair:${clientIp(request)}`, 5, 15 * 60);
+    if (!limiter.allowed) return rateLimited(limiter.retryAfter);
+  } catch { return serverError(); }
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return badRequest();
   const { pairing_code } = parsed.data;
