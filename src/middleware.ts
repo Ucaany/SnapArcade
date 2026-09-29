@@ -1,9 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { eq } from "drizzle-orm";
-import { db } from "./src/db";
-import { profiles } from "./src/db/schema";
-import { landingForRole, roleForPath } from "./src/lib/auth-policy";
+import { landingForRole, roleForPath, type Role } from "@/lib/auth-policy";
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -29,11 +26,12 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  let profile;
+  let profile: { role: Role; status: string } | null = null;
   try {
-    [profile] = await db.select({ role: profiles.role, status: profiles.status }).from(profiles).where(eq(profiles.id, user.id)).limit(1);
+    const { data } = await supabase.from("profiles").select("role, status").eq("id", user.id).limit(1).single();
+    profile = data;
   } catch {
-    profile = undefined;
+    profile = null;
   }
   if (!profile || profile.status !== "active") {
     if (roleForPath(path) || path === "/") {
