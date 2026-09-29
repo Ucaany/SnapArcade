@@ -1,0 +1,14 @@
+name = "snaparcade-production"
+main = "workers/production.ts"
+compatibility_date = "2026-09-29"
+workers_dev = false
+
+[vars]
+APP_ORIGIN = "https://snaparcade.id"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Set the secret outside Git:
+# npx wrangler secret put CRON_SECRET
+# Use the same value as NOTIFICATION_CRON_SECRET in Cloudflare Pages.

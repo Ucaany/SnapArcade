@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "deploy:worker": "wrangler deploy",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "auth:check": "tsx src/lib/auth-policy.check.ts",
