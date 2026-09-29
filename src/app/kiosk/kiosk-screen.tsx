@@ -10,6 +10,7 @@ import { defaultPrinterSettings } from "@/lib/printer-settings";
 const steps = ["/kiosk", "/kiosk/pair", "/kiosk/idle", "/kiosk/pilih-paket", "/kiosk/pembayaran", "/kiosk/voucher", "/kiosk/sesi", "/kiosk/editor", "/kiosk/preview-cetak", "/kiosk/mencetak", "/kiosk/hasil"];
 const defaultPackages = [{ id: "", name: "Paket belum dimuat", detail: "Pairing kiosk diperlukan", price: 0, photoCount: 4 }];
 const frames = ["Pop Art", "Retro 90s", "Pesta", "Klasik", "Warna-warni"];
+const STORAGE_KEY = "snaparcade-kiosk-v2";
 
 export default function KioskScreen() {
   const path = usePathname();
@@ -23,7 +24,10 @@ export default function KioskScreen() {
   const [notice, setNotice] = useState("");
   const [progress, setProgress] = useState(0);
   const [paymentLeft, setPaymentLeft] = useState(300);
-  const [paymentState, setPaymentState] = useState("Menunggu pembayaran simulasi");
+  const [paymentState, setPaymentState] = useState("Menunggu pembayaran");
+  const [transactionId, setTransactionId] = useState("");
+  const [qrString, setQrString] = useState("");
+  const [paymentUrl, setPaymentUrl] = useState("");
   const [retakes, setRetakes] = useState<Record<number, number>>({});
   const [zoom, setZoom] = useState(1);
   const [frame, setFrame] = useState(0);
@@ -39,6 +43,7 @@ export default function KioskScreen() {
   const [photos, setPhotos] = useState<Record<number, Blob>>({});
   const [finalStrip, setFinalStrip] = useState<Blob | null>(null);
   const [finalStripUrl, setFinalStripUrl] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
   const camera = useCameraUSB();
   const printer = usePrinterUSB();
   const stripCanvas = useRef<HTMLCanvasElement>(null);
@@ -51,17 +56,18 @@ export default function KioskScreen() {
   }, [finalStrip]);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem("snaparcade-kiosk-v2");
+    const saved = sessionStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const state = JSON.parse(saved);
-        setSelected(Number.isInteger(state.selected) ? state.selected : 0); setShot(Number.isInteger(state.shot) ? Math.max(1, state.shot) : 1); setFilter(typeof state.filter === "string" ? state.filter : "Warna asli"); setCopies([1, 2, 3].includes(state.copies) ? state.copies : 1); setKioskToken(typeof state.kioskToken === "string" ? state.kioskToken : ""); setSessionId(typeof state.sessionId === "string" ? state.sessionId : "");
+        setSelected(Number.isInteger(state.selected) ? state.selected : 0); setShot(Number.isInteger(state.shot) ? Math.max(1, state.shot) : 1); setFilter(typeof state.filter === "string" ? state.filter : "Warna asli"); setCopies([1, 2, 3].includes(state.copies) ? state.copies : 1); setKioskToken(typeof state.kioskToken === "string" ? state.kioskToken : ""); setSessionId(typeof state.sessionId === "string" ? state.sessionId : ""); setTransactionId(typeof state.transactionId === "string" ? state.transactionId : ""); setQrString(typeof state.qrString === "string" ? state.qrString : ""); setPaymentUrl(typeof state.paymentUrl === "string" ? state.paymentUrl : ""); setPaymentState(typeof state.paymentState === "string" ? state.paymentState : "Menunggu pembayaran"); setPaymentLeft(Number.isFinite(state.paymentLeft) ? Math.max(0, state.paymentLeft) : 300); setQrUrl(typeof state.qrUrl === "string" ? state.qrUrl : "");
       } catch {
-        sessionStorage.removeItem("snaparcade-kiosk");
+        sessionStorage.removeItem(STORAGE_KEY);
       }
     }
+    setRestored(true);
   }, []);
-  useEffect(() => { sessionStorage.setItem("snaparcade-kiosk-v2", JSON.stringify({ selected, shot, filter, copies, kioskToken, sessionId })); }, [selected, shot, filter, copies, kioskToken, sessionId]);
+  useEffect(() => { if (restored) sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ selected, shot, filter, copies, kioskToken, sessionId, transactionId, qrString, paymentUrl, paymentState, paymentLeft, qrUrl })); }, [restored, selected, shot, filter, copies, kioskToken, sessionId, transactionId, qrString, paymentUrl, paymentState, paymentLeft, qrUrl]);
   const api = async (url: string, init: RequestInit = {}) => fetch(url, { ...init, headers: { ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(kioskToken ? { "X-Kiosk-Token": kioskToken } : {}), ...init.headers } });
   useEffect(() => { if (!kioskToken) return; void api("/api/kiosk/packages").then(async (response) => { if (response.ok) { const data = await response.json(); setPackages(data.packages.map((item: { id: string; name: string; description: string | null; photoCount: number; priceIdr: number }) => ({ id: item.id, name: item.name, detail: item.description ?? `${item.photoCount} foto`, photoCount: item.photoCount, price: item.priceIdr }))); } }); }, [kioskToken]);
   useEffect(() => {
@@ -89,15 +95,15 @@ export default function KioskScreen() {
     return () => { cancelled = true; printer.cancel(); };
   }, [path, finalStrip, copies, printer.supported, printer.connect, printer.print, printer.cancel, printer.error, printer.progress, printer.deviceLabel]);
   useEffect(() => {
-    if (path !== "/kiosk/pembayaran" || paymentLeft <= 0 || paymentState === "Pembayaran berhasil (simulasi)") return;
+    if (path !== "/kiosk/pembayaran" || paymentLeft <= 0 || paymentState === "Pembayaran berhasil") return;
     const timer = window.setInterval(() => setPaymentLeft((left) => Math.max(0, left - 1)), 1000);
     return () => window.clearInterval(timer);
-  }, [path, paymentLeft, paymentState]);
+  }, [path, paymentLeft, paymentState, transactionId]);
   useEffect(() => {
-    if (path !== "/kiosk/pembayaran" || paymentLeft === 0 || paymentState === "Pembayaran berhasil (simulasi)") return;
-    const poll = window.setInterval(() => setPaymentState("Memeriksa status demo..."), 3000);
+    if (path !== "/kiosk/pembayaran" || !transactionId || paymentLeft === 0 || paymentState === "Pembayaran berhasil") return;
+    const poll = window.setInterval(() => { void api(`/api/kiosk/payment/status/${transactionId}`).then(async (response) => { if (!response.ok) return; const data = await response.json(); if (data.status === "settlement") setPaymentState("Pembayaran berhasil"); else if (["expired", "failed"].includes(data.status)) setPaymentState("Pembayaran gagal atau kedaluwarsa"); else setPaymentState("Menunggu pembayaran"); }); }, 3000);
     return () => window.clearInterval(poll);
-  }, [path, paymentLeft, paymentState]);
+  }, [path, paymentLeft, paymentState, transactionId]);
   useEffect(() => {
     if (path !== "/kiosk/idle") return;
     const timer = window.setInterval(() => setSlide((value) => (value + 1) % frames.length), 2800);
@@ -145,6 +151,7 @@ export default function KioskScreen() {
     setNotice(response.ok ? "Strip final tersimpan." : "Strip gagal disimpan."); return response.ok;
   };
   const createSession = async (paymentState: "paid" | "voucher") => { if (!packageInfo.id || apiBusy) return false; setApiBusy(true); try { const response = await api("/api/kiosk/session/create", { method: "POST", body: JSON.stringify({ package_id: packageInfo.id, payment_state: paymentState, ...(paymentState === "voucher" ? { voucher_code: voucher.trim() } : {}) }) }); if (!response.ok) { setNotice(response.status === 409 ? "Voucher tidak valid, kedaluwarsa, atau sudah habis." : "Sesi gagal dibuat. Periksa koneksi kiosk."); return false; } const data = await response.json(); setSessionId(data.session_id); return true; } finally { setApiBusy(false); } };
+  const startPayment = async () => { if (!packageInfo.id || apiBusy) return false; setTransactionId(""); setQrString(""); setPaymentUrl(""); setPaymentState("Menunggu pembayaran"); setPaymentLeft(900); setQrUrl(""); setSessionId(""); setApiBusy(true); try { const sessionResponse = await api("/api/kiosk/session/create", { method: "POST", body: JSON.stringify({ package_id: packageInfo.id, payment_state: "paid" }) }); if (!sessionResponse.ok) { setNotice("Sesi gagal dibuat. Periksa koneksi kiosk."); return false; } const session = await sessionResponse.json(); setSessionId(session.session_id); const paymentResponse = await api("/api/kiosk/payment/create", { method: "POST", body: JSON.stringify({ session_id: session.session_id, amount: packageInfo.price }) }); if (!paymentResponse.ok) { setTransactionId(""); setQrString(""); setPaymentUrl(""); setSessionId(""); setPaymentState("Pembayaran gagal dibuat"); setPaymentLeft(0); setNotice("Pembayaran gagal dibuat. Sesi dibatalkan, silakan coba lagi."); return false; } const payment = await paymentResponse.json(); setTransactionId(payment.transaction_id); setQrString(payment.qr_string || ""); setPaymentUrl(payment.payment_url || payment.qr_url || payment.checkout_url || payment.invoice_url || ""); setPaymentState("Menunggu pembayaran"); setPaymentLeft(900); return true; } finally { setApiBusy(false); } };
   let title = "SnapArcade";
   let content: React.ReactNode;
 
@@ -163,12 +170,12 @@ export default function KioskScreen() {
       break;
     case "/kiosk/pilih-paket":
       title = "Pilih paket foto";
-      content = <><div className="kiosk-grid">{packages.map((item, index) => <button key={item.name} type="button" className="nb-card kiosk-option" aria-pressed={selected === index} onClick={() => setSelected(index)}><strong>{item.name}</strong>{item.detail}<p><b>Rp{item.price.toLocaleString("id-ID")}</b></p></button>)}</div><div className="kiosk-actions"><button className="nb-button" onClick={() => go("/kiosk/pembayaran")}>Lanjut, {packageInfo.name}</button>{button("Pakai voucher", "/kiosk/voucher", true)}</div><p className="kiosk-note">Harga contoh untuk demo, bukan penawaran transaksi.</p></>;
+      content = <><div className="kiosk-grid">{packages.map((item, index) => <button key={item.name} type="button" className="nb-card kiosk-option" aria-pressed={selected === index} onClick={() => setSelected(index)}><strong>{item.name}</strong>{item.detail}<p><b>Rp{item.price.toLocaleString("id-ID")}</b></p></button>)}</div><div className="kiosk-actions"><button disabled={apiBusy} className="nb-button" onClick={() => { go("/kiosk/pembayaran"); void startPayment(); }}>Lanjut, {packageInfo.name}</button>{button("Pakai voucher", "/kiosk/voucher", true)}</div><p className="kiosk-note">Harga contoh untuk demo, bukan penawaran transaksi.</p></>;
       break;
     case "/kiosk/pembayaran":
       title = "Pembayaran demo";
       title = paymentLeft ? "Pindai untuk membayar" : "Waktu pembayaran habis";
-      content = <><p>{packageInfo.name} · Rp{packageInfo.price.toLocaleString("id-ID")}</p><div className="kiosk-payment-layout"><div className="kiosk-qr" aria-label="QR pembayaran menunggu gateway"><span>QRIS</span><small>MENUNGGU</small></div><div><strong className="kiosk-timer" aria-live="polite">{String(Math.floor(paymentLeft / 60)).padStart(2, "0")}:{String(paymentLeft % 60).padStart(2, "0")}</strong><p aria-live="polite">{paymentLeft ? paymentState : "Waktu pembayaran habis."}</p><small>Payment gateway diaktifkan pada tahap berikutnya.</small></div></div><div className="kiosk-actions"><button disabled={!paymentLeft || apiBusy} className="nb-button" onClick={async () => { if (await createSession("paid")) go("/kiosk/sesi"); }}>Lanjut setelah pembayaran</button>{button("Gunakan voucher", "/kiosk/voucher", true)}{button("Ganti paket", "/kiosk/pilih-paket", true)}</div></>;
+      content = <><p>{packageInfo.name} · Rp{packageInfo.price.toLocaleString("id-ID")}</p><div className="kiosk-payment-layout"><div className="kiosk-qr" aria-label="Target pembayaran"><span>{paymentUrl ? "BUKA LINK PEMBAYARAN" : qrString ? "QRIS SIAP DI GATEWAY" : "MENUNGGU"}</span>{paymentUrl ? <a href={paymentUrl} target="_blank" rel="noreferrer">Buka halaman pembayaran</a> : <small>{qrString ? "QRIS tersedia, tetapi kiosk belum memiliki renderer QR." : "Target pembayaran belum tersedia."}</small>}</div><div><strong className="kiosk-timer" aria-live="polite">{String(Math.floor(paymentLeft / 60)).padStart(2, "0")}:{String(paymentLeft % 60).padStart(2, "0")}</strong><p aria-live="polite">{paymentLeft ? paymentState : "Waktu pembayaran habis."}</p><small>Gunakan link gateway jika QR tidak tampil.</small></div></div><div className="kiosk-actions"><button disabled={paymentState !== "Pembayaran berhasil" || apiBusy} className="nb-button" onClick={() => go("/kiosk/sesi")}>Lanjut setelah pembayaran</button>{button("Gunakan voucher", "/kiosk/voucher", true)}{button("Ganti paket", "/kiosk/pilih-paket", true)}</div></>;
       break;
     case "/kiosk/voucher":
       title = "Punya kode voucher?";

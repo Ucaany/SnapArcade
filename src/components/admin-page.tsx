@@ -47,7 +47,7 @@ function InviteOwnerForm() {
     if (result.error) toast.error(result.error);
     else { toast.success(result.success); form.reset(); router.refresh(); }
   };
-  return <form onSubmit={submit} className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-[1fr_1fr_1fr_auto]"><Input name="email" type="email" required placeholder="Email owner" aria-label="Email owner" /><Input name="fullName" required minLength={2} placeholder="Nama kontak" aria-label="Nama kontak" /><Input name="businessName" required minLength={2} placeholder="Nama bisnis" aria-label="Nama bisnis" /><Button type="submit">Undang owner</Button></form>;
+  return <form onSubmit={submit} className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto]"><Input name="email" type="email" required placeholder="Email owner" aria-label="Email owner" /><Input name="fullName" required minLength={2} placeholder="Nama kontak" aria-label="Nama kontak" /><Input name="businessName" required minLength={2} placeholder="Nama bisnis" aria-label="Nama bisnis" /><Button type="submit" className="w-full sm:w-auto">Undang owner</Button></form>;
 }
 
 function OwnerDetail({ id, data }: { id: string; data: SuperadminData }) {

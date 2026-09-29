@@ -12,8 +12,8 @@ export function PublicHeader() {
   return <header className="border-b-[3px] border-black bg-[#fffdf0]">
     <nav aria-label="Navigasi utama" className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-3">
       <Link className="font-[family-name:var(--font-space-grotesk)] text-2xl font-extrabold" href="/">SnapArcade<span className="text-[#b45309]">.</span></Link>
-      <button aria-expanded={open} aria-controls="public-navigation" aria-label={open ? "Tutup navigasi" : "Buka navigasi"} className="inline-flex size-11 items-center justify-center rounded-lg border-[3px] border-black bg-white md:hidden" onClick={() => setOpen(!open)}>{open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</button>
-      <div id="public-navigation" className={`${open ? "flex" : "hidden"} w-full flex-col gap-2 pb-2 text-sm font-bold md:flex md:w-auto md:flex-row md:items-center md:gap-5 md:pb-0`}>
+      <button aria-expanded={open} aria-controls="public-navigation" aria-label={open ? "Tutup navigasi" : "Buka navigasi"} className="inline-flex size-11 items-center justify-center rounded-lg border-[3px] border-black bg-white lg:hidden" onClick={() => setOpen(!open)}>{open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</button>
+      <div id="public-navigation" className={`${open ? "flex" : "hidden"} w-full flex-col gap-2 pb-2 text-sm font-bold lg:flex lg:w-auto lg:flex-row lg:items-center lg:gap-5 lg:pb-0`}>
         {links.map(([label, href]) => <Link className="inline-flex min-h-11 items-center underline-offset-4 hover:underline" href={href} key={href} onClick={() => setOpen(false)}>{label}</Link>)}
          <Button nativeButton={false} render={<Link href="/masuk" onClick={() => setOpen(false)} />} variant="public">Masuk ke akun</Button>
       </div>

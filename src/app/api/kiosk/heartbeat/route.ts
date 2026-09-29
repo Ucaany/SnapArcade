@@ -24,7 +24,9 @@ export async function GET(request: Request) {
   const rawDevice = url.searchParams.get("device_info");
   let deviceInfo: z.infer<typeof deviceInfoFull> | null = null;
   if (rawDevice) {
-    const parsed = deviceInfoSchema.safeParse(JSON.parse(rawDevice));
+    let decoded: unknown;
+    try { decoded = JSON.parse(rawDevice); } catch { return badRequest(); }
+    const parsed = deviceInfoSchema.safeParse(decoded);
     if (!parsed.success) return badRequest();
     deviceInfo = {
       os: parsed.data.os ?? "",
