@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
 import { ContactPage } from "../public-pages";
-export const metadata: Metadata = { title: "Kontak", description: "Hubungi tim SnapArcade tentang paket dan kebutuhan photobooth.", alternates: { canonical: "/kontak" } };
+import { createPageMetadata } from "@/lib/seo";
+export const metadata = createPageMetadata("Kontak", "Hubungi tim SnapArcade tentang paket dan kebutuhan photobooth.", "/kontak");
 export default function Page() { return <ContactPage />; }

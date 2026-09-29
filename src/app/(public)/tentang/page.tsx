@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
 import { AboutPage } from "../public-pages";
-export const metadata: Metadata = { title: "Tentang", description: "Kenali tujuan SnapArcade untuk membantu operasional photobooth.", alternates: { canonical: "/tentang" } };
+import { createPageMetadata } from "@/lib/seo";
+export const metadata = createPageMetadata("Tentang", "Kenali tujuan SnapArcade untuk membantu operasional photobooth.", "/tentang");
 export default function Page() { return <AboutPage />; }
